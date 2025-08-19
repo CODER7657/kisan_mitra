@@ -1,6 +1,7 @@
-# Kisan Mitra
+# Kisan Mitra AI
 
 A comprehensive platform designed to support and empower farmers with modern agricultural solutions and resources.
+
 
 ## Features
 
