@@ -1,4 +1,3 @@
-
 // In frontend/src/routes/api/analyze/+server.js
 
 import { json } from '@sveltejs/kit';
@@ -89,7 +88,7 @@ export async function POST({ request }) {
                         {
                             type: "image_url",
                             image_url: {
-                                url: `data:image/jpeg;base64,${base64Image}`
+                                "url": `data:image/jpeg;base64,${base64Image}`
                             },
                         },
                     ],
@@ -100,7 +99,7 @@ export async function POST({ request }) {
         
         const aiResponseText = response.choices[0].message.content;
 
-// 5. Send the AI's response back to the frontend
+        // 5. Send the AI's response back to the frontend
         return json({ result: aiResponseText }, { status: 200 });
 
     } catch (error) {
