@@ -1,14 +1,16 @@
+
 <script lang="ts">
+  import { supabase } from '$lib/supabaseClient'; // Import our Supabase client
+
   // State variables to hold user files and app status
   let videoFile: FileList;
   let audioFile: FileList;
   let textFile: FileList;
-  let videoUrl = '';
-  let audioUrl = '';
-  let textUrl = '';
+  
   let isLoading = false;
   let analysisResult = '';
   let errorMessage = '';
+  let loadingMessage = '';
 
   // Main function triggered by the button click
   async function handleSubmit() {
@@ -23,69 +25,51 @@
     analysisResult = '';
     errorMessage = '';
 
-    // ============================
-    // === NEW CHANGE STARTS HERE ===
-    // ============================
+    // Helper function to upload a single file DIRECTLY to Supabase from the browser
+    const uploadFile = async (file: File, folder: string) => {
+  loadingMessage = `Uploading ${file.name}...`;
+  const uniqueFileName = `${folder}/${Date.now()}-${file.name}`;
 
-    // This code now intelligently chooses the backend URL.
-    // In development (npm run dev), it uses the local URL from your .env file.
-    // In production (when deployed), it uses a relative path ('') because the API will be on the same domain.
-    const API_BASE_URL = import.meta.env.DEV
-      ? import.meta.env.VITE_API_BASE_URL
-      : '';
+      // Use the supabase client to upload the file
+      const { error } = await supabase.storage
+        .from('media_uploads') // Our public bucket
+        .upload(uniqueFileName, file);
 
-    console.log('Using API Base URL:', API_BASE_URL || '(Relative Path)');
-
-    // ==========================
-    // === NEW CHANGE ENDS HERE ===
-    // ==========================
-
-
-    // Helper function to upload a single file to the backend
-    const uploadFile = async (file: File) => {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // Call the /upload endpoint on the backend server
-      const response = await fetch(`${API_BASE_URL}/api/upload`, { // Note: Changed to /api/upload
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to upload ${file.name}.`);
+      if (error) {
+        throw new Error(`Failed to upload ${file.name}: ${error.message}`);
       }
-      const result = await response.json();
-      return result.url; // The backend returns the public URL
+
+      // If successful, get the public URL for the file
+      const { data } = supabase.storage
+        .from('media_uploads')
+        .getPublicUrl(uniqueFileName);
+      
+      return data.publicUrl;
     };
 
     try {
-      // 3. Upload all files concurrently
-      const [videoUploadUrl, audioUploadUrl, textUploadUrl] = await Promise.all([
-        uploadFile(videoFile[0]),
-        uploadFile(audioFile[0]),
-        uploadFile(textFile[0]),
-      ]);
+      // 3. Upload all files directly to Supabase and get their public URLs
+      const videoUploadUrl = await uploadFile(videoFile[0], 'videos');
+      const audioUploadUrl = await uploadFile(audioFile[0], 'audio');
+      const textUploadUrl = await uploadFile(textFile[0], 'text');
 
-      // Store the returned URLs
-      videoUrl = videoUploadUrl;
-      audioUrl = audioUploadUrl;
-      textUrl = textUploadUrl;
+      loadingMessage = '🧠 AI is analyzing your files... This may take a moment.';
 
-      // 4. Call the /analyze endpoint with the file URLs
-      const analysisResponse = await fetch(`${API_BASE_URL}/api/analyze`, { // Note: Changed to /api/analyze
+      // 4. Call our /api/analyze endpoint with the new URLs
+      //    This request is small and will not hit the Vercel limit.
+  const analysisResponse = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          videoUrl: videoUrl,
-          audioUrl: audioUrl,
-          farmHistoryUrl: textUrl,
+          videoUrl: videoUploadUrl,
+          audioUrl: audioUploadUrl,
+          farmHistoryUrl: textUploadUrl,
         }),
       });
 
-      if (!analysisResponse.ok) {
-        const errorData = await analysisResponse.json().catch(() => ({ detail: 'Analysis failed with no details.' }));
-        throw new Error(errorData.detail || 'The AI analysis failed.');
+if (!analysisResponse.ok) {
+  const errorData = await analysisResponse.json().catch(() => ({ error: 'Analysis failed with no details.' }));
+  throw new Error(`${errorData.error} The AI analysis failed.`);
       }
       
       const finalData = await analysisResponse.json();
@@ -97,6 +81,7 @@
     } finally {
       // 6. Stop the loading indicator
       isLoading = false;
+      loadingMessage = '';
     }
   }
 </script>
@@ -127,16 +112,16 @@
       {#if isLoading}Analyzing...{:else}Analyze and Get Advice{/if}
     </button>
 
-    {#if isLoading || analysisResult || errorMessage}
+  {#if isLoading || analysisResult || errorMessage}
       <div class="results-section">
         {#if isLoading}
           <div class="loading-indicator">
             <div class="spinner"></div>
-            <p>🧠 AI is analyzing your files... This may take a moment.</p>
+            <p>{loadingMessage}</p>
           </div>
         {/if}
 
-        {#if analysisResult}
+        {#if analysisResult && !isLoading}
           <h2>AI Analysis & Recommendations</h2>
           <pre>{analysisResult}</pre>
         {/if}
@@ -148,6 +133,7 @@
     {/if}
   </div>
 </main>
+
 
 <style>
   :root {
