@@ -1,0 +1,9 @@
+# In backend/requirements.txt
+fastapi
+uvicorn[standard]
+pydantic
+openai
+python-dotenv
+python-multipart
+opencv-python-headless
+requests
