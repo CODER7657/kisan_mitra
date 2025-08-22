@@ -10,7 +10,7 @@
 
 ## 🚀 Live Demo
 
-**🌐 [Visit Kisan Mitra AI](https://kisan-mitra-seven.vercel.app/)**
+**🌐 [Visit Kisan Mitra AI](https://kisan-mitra-gilt.vercel.app/)**
 
 ## ✨ Key Features
 
