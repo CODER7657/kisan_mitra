@@ -35,7 +35,7 @@
 		// 3. Send data to the FastAPI backend
 		try {
 			// We'll use localhost for local testing. This will be changed for deployment.
-			const response = await fetch('http://127.0.0.1:8000/analyze/', {
+			const response = await fetch('https://kisan-mitra-g4jn.onrender.com/analyze/' , {
 				method: 'POST',
 				body: formData
 			});
