@@ -1,4 +1,3 @@
- 
 # main.py
 
 import os
@@ -76,20 +75,20 @@ async def analyze_farm_data(
         print(f"Uploading {video_file.filename} with content type {video_content_type}")
         print(f"Uploading {audio_file.filename} with content type {audio_content_type}")
 
-        # Upload to Vercel Blob and get back a result object with a public URL
+        # --- FIX: Call put() with positional arguments for pathname and body ---
         video_blob = put(
-            pathname=f"uploads/{video_file.filename}", 
-            body=video_contents, 
+            f"uploads/{video_file.filename}", 
+            video_contents, 
             options={'token': os.getenv("BLOB_READ_WRITE_TOKEN"), 'content_type': video_content_type}
         )
         audio_blob = put(
-            pathname=f"uploads/{audio_file.filename}", 
-            body=audio_contents, 
+            f"uploads/{audio_file.filename}", 
+            audio_contents, 
             options={'token': os.getenv("BLOB_READ_WRITE_TOKEN"), 'content_type': audio_content_type}
         )
         history_blob = put(
-            pathname=f"uploads/{history_file.filename}", 
-            body=history_contents, 
+            f"uploads/{history_file.filename}", 
+            history_contents, 
             options={'token': os.getenv("BLOB_READ_WRITE_TOKEN")}
         )
 
@@ -110,10 +109,7 @@ async def analyze_farm_data(
 
 
         # --- 3. Call OpenAI for Analysis ---
-        # Construct the prompt for Gemini 2.5 Pro
-        # Note: As of my last update, direct video URL input for analysis is a feature
-        # of specific models like Gemini. We'll structure the prompt assuming this capability.
-        
+        # Construct the prompt for the AI model
         farm_history_text = history_contents.decode('utf-8')
 
         prompt_message = f"""
