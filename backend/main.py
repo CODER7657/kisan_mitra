@@ -53,9 +53,8 @@ def read_root():
 
 @app.post("/analyze/")
 async def analyze_farm_data(
-    video_file: UploadFile = File(...),
+    image_file: UploadFile = File(...),
     audio_file: UploadFile = File(...),
-    history_file: UploadFile = File(...),
 ):
     """
     This is the main endpoint that receives farm data, uploads it to blob storage,
@@ -64,37 +63,30 @@ async def analyze_farm_data(
     try:
         # --- 1. Upload files to Vercel Blob Storage ---
         # We need to read the content of the files into memory first
-        video_contents = await video_file.read()
+        image_contents = await image_file.read()
         audio_contents = await audio_file.read()
-        history_contents = await history_file.read()
 
         # Guess the content type of the files
-        video_content_type = mimetypes.guess_type(video_file.filename)[0] or 'application/octet-stream'
+        image_content_type = mimetypes.guess_type(image_file.filename)[0] or 'application/octet-stream'
         audio_content_type = mimetypes.guess_type(audio_file.filename)[0] or 'application/octet-stream'
         
-        print(f"Uploading {video_file.filename} with content type {video_content_type}")
+        print(f"Uploading {image_file.filename} with content type {image_content_type}")
         print(f"Uploading {audio_file.filename} with content type {audio_content_type}")
 
         # --- FIX: Call put() with positional arguments for pathname and body ---
-        video_blob = put(
-            f"uploads/{video_file.filename}", 
-            video_contents, 
-            options={'token': os.getenv("BLOB_READ_WRITE_TOKEN"), 'content_type': video_content_type}
+        image_blob = put(
+            f"uploads/{image_file.filename}", 
+            image_contents, 
+            options={'token': os.getenv("BLOB_READ_WRITE_TOKEN"), 'content_type': image_content_type}
         )
         audio_blob = put(
             f"uploads/{audio_file.filename}", 
             audio_contents, 
             options={'token': os.getenv("BLOB_READ_WRITE_TOKEN"), 'content_type': audio_content_type}
         )
-        history_blob = put(
-            f"uploads/{history_file.filename}", 
-            history_contents, 
-            options={'token': os.getenv("BLOB_READ_WRITE_TOKEN")}
-        )
 
-        print(f"Video URL: {video_blob['url']}")
+        print(f"Image URL: {image_blob['url']}")
         print(f"Audio URL: {audio_blob['url']}")
-        print(f"History URL: {history_blob['url']}")
 
         # --- 2. Transcribe Audio using OpenAI Whisper ---
         # OpenAI's API can take the file content directly for transcription
@@ -110,8 +102,6 @@ async def analyze_farm_data(
 
         # --- 3. Call OpenAI for Analysis ---
         # Construct the prompt for the AI model
-        farm_history_text = history_contents.decode('utf-8')
-
         prompt_message = f"""
         You are "Kisan Mitra AI," an expert agricultural diagnostic assistant powered by Gemini 2.5 Pro.
         Analyze the following data from a farmer and provide a hyper-personalized, actionable diagnosis and recommendation.
@@ -119,19 +109,14 @@ async def analyze_farm_data(
         **Farmer's Spoken Query (from audio):**
         "{transcript}"
 
-        **Farmer's Historical Data (from text file):**
-        ---
-        {farm_history_text}
-        ---
-
-        **Visual Evidence (from video):**
-        Please analyze the video available at the following URL: {video_blob['url']}
-        In the video, look for visual cues of plant disease, pest infestation, soil condition, water stress, or any other relevant agricultural indicators.
+        **Visual Evidence (from image):**
+        Please analyze the image available at the following URL: {image_blob['url']}
+        In the image, look for visual cues of plant disease, pest infestation, soil condition, water stress, or any other relevant agricultural indicators.
 
         **Your Task:**
-        Based on all three sources of information (audio query, historical text data, and video analysis), provide a response in Markdown format that includes:
+        Based on the two sources of information (audio query and image analysis), provide a response in Markdown format that includes:
         1.  **Diagnosis:** A clear and concise identification of the primary problem(s).
-        2.  **Detailed Explanation:** Explain the reasoning behind your diagnosis, referencing specific evidence from the video, audio, and text file.
+        2.  **Detailed Explanation:** Explain the reasoning behind your diagnosis, referencing specific evidence from the image and audio.
         3.  **Actionable Recommendations:** Provide a step-by-step plan for the farmer to follow. Be specific about treatments, products (suggesting generic types rather than brands), and techniques.
         4.  **Preventative Measures:** Suggest long-term strategies to prevent this issue from recurring.
         """
@@ -152,9 +137,8 @@ async def analyze_farm_data(
         # --- 4. Return the Result ---
         return {
             "analysis": analysis_result,
-            "video_url": video_blob['url'],
+            "image_url": image_blob['url'],
             "audio_url": audio_blob['url'],
-            "history_url": history_blob['url'],
             "transcript": transcript
         }
 
