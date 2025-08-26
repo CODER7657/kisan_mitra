@@ -61,7 +61,8 @@
 
 		// 3. Send data to the FastAPI backend
 		try {
-			const response = await fetch('https://kisan-mitra-g4jn.onrender.com', {
+			// FIXED: Added the correct /analyze/ endpoint to the URL
+			const response = await fetch('https://kisan-mitra-g4jn.onrender.com/analyze/', {
 				method: 'POST',
 				body: formData
 			});
