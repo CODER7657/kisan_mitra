@@ -21,7 +21,7 @@ app = FastAPI(title="Kisan Mitra AI Backend")
 origins = [
     "http://localhost:5173",  # SvelteKit dev server
     "http://localhost:3000",  # Common alternative dev port
-    "https://kisan-mitra-e0cylyztk-coder7657s-projects.vercel.app", # Your new Vercel URL
+    "https://kisan-mitra-2w7six32y-coder7657s-projects.vercel.app", # FIXED: Your new Vercel URL
 ]
 
 app.add_middleware(
