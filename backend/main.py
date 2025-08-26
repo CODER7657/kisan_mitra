@@ -21,12 +21,12 @@ app = FastAPI(title="Kisan Mitra AI Backend")
 origins = [
     "http://localhost:5173",  # SvelteKit dev server
     "http://localhost:3000",  # Common alternative dev port
-    # We will add our deployed Vercel frontend URL here later
+    "https://kisan-mitra-e0cylyztk-coder7657s-projects.vercel.app", # Your new Vercel URL
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For simplicity, allow all origins. For production, restrict this.
+    allow_origins=origins, # Use the specific list of origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,7 +73,7 @@ async def analyze_farm_data(
         print(f"Uploading {image_file.filename} with content type {image_content_type}")
         print(f"Uploading {audio_file.filename} with content type {audio_content_type}")
 
-        # --- FIX: Call put() with positional arguments for pathname and body ---
+        # Call put() with positional arguments for pathname and body
         image_blob = put(
             f"uploads/{image_file.filename}", 
             image_contents, 
