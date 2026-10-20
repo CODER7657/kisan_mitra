@@ -1,0 +1,9 @@
+# Secrets: never commit. Copy backend/.env.example to backend/.env instead.
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
