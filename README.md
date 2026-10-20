@@ -2,7 +2,12 @@
 
 [![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=flat&logo=vercel)](https://kisan-mitra-seven.vercel.app/) [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/) [![Svelte](https://img.shields.io/badge/Frontend-SvelteKit-FF3E00?style=flat&logo=svelte)](https://kit.svelte.dev/) [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat&logo=python)](https://python.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
 
-> ⚠️ **Development Status**: This project is currently in the development stage and substantial work is still in progress. Features may be incomplete or subject to change.
+> ⚠️ **Status: prototype, being rebuilt.** The app takes one crop photo and a voice question and
+> asks GPT-4o for a diagnosis. Until October 2026 the photo was never actually sent to the model,
+> so earlier diagnoses were based on the voice question alone. Answers are not grounded in official
+> sources yet and must not be used for pesticide or fertiliser decisions; ask your Krishi Vigyan
+> Kendra. The feature list below describes the goal, not the current app. See
+> **[docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md)**.
 
 **Kisan Mitra AI** is an intelligent agricultural diagnostic platform that empowers farmers with AI-driven insights for crop health management, disease detection, and personalized farming recommendations. Using advanced multimodal analysis, the platform processes video, audio, and historical data to provide comprehensive agricultural guidance.
 

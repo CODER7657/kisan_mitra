@@ -1,5 +1,6 @@
 # main.py
 
+import base64
 import os
 import openai
 from dotenv import load_dotenv
@@ -103,33 +104,42 @@ async def analyze_farm_data(
         # --- 3. Call OpenAI for Analysis ---
         # Construct the prompt for the AI model
         prompt_message = f"""
-        You are "Kisan Mitra AI," an expert agricultural diagnostic assistant powered by Gemini 2.5 Pro.
-        Analyze the following data from a farmer and provide a hyper-personalized, actionable diagnosis and recommendation.
+        You are "Kisan Mitra AI", an agricultural assistant. A farmer has sent a photo of their crop
+        (attached) and a spoken question.
 
-        **Farmer's Spoken Query (from audio):**
+        **Farmer's spoken question (transcribed):**
         "{transcript}"
 
-        **Visual Evidence (from image):**
-        Please analyze the image available at the following URL: {image_blob['url']}
-        In the image, look for visual cues of plant disease, pest infestation, soil condition, water stress, or any other relevant agricultural indicators.
+        **Rules:**
+        - Describe only what you can actually see in the attached photo. If the photo is unclear, or
+          doesn't show the problem, say so plainly instead of guessing.
+        - Do not give pesticide, fungicide or fertiliser doses, and do not name brands. Say which kind
+          of treatment may help, and tell the farmer to confirm the product and dose with their local
+          Krishi Vigyan Kendra (KVK) or agriculture officer before using any chemical.
+        - If you are not confident in a diagnosis, say that, and recommend showing the crop to the KVK.
+        - Reply in the same language the farmer used, in simple words.
 
-        **Your Task:**
-        Based on the two sources of information (audio query and image analysis), provide a response in Markdown format that includes:
-        1.  **Diagnosis:** A clear and concise identification of the primary problem(s).
-        2.  **Detailed Explanation:** Explain the reasoning behind your diagnosis, referencing specific evidence from the image and audio.
-        3.  **Actionable Recommendations:** Provide a step-by-step plan for the farmer to follow. Be specific about treatments, products (suggesting generic types rather than brands), and techniques.
-        4.  **Preventative Measures:** Suggest long-term strategies to prevent this issue from recurring.
+        **Reply in Markdown with:**
+        1. **What I can see:** what the photo shows, and how sure you are.
+        2. **Likely problem:** the most likely cause, and other possibilities.
+        3. **What to do now:** practical steps, without doses or brands.
+        4. **Prevention:** what helps stop it coming back.
         """
 
-        # Make the API call
+        # Send the photo itself as an image part. A URL written into the text is never opened by the
+        # model, which is how earlier replies came to describe photos it had not seen.
+        image_data_url = f"data:{image_content_type};base64,{base64.b64encode(image_contents).decode('ascii')}"
         chat_completion = openai.chat.completions.create(
             messages=[
                 {
                     "role": "user",
-                    "content": prompt_message,
+                    "content": [
+                        {"type": "text", "text": prompt_message},
+                        {"type": "image_url", "image_url": {"url": image_data_url}},
+                    ],
                 }
             ],
-            model="gpt-4o", # Using gpt-4o as it's highly capable with multimodal-like text prompts
+            model="gpt-4o",
         )
 
         analysis_result = chat_completion.choices[0].message.content
