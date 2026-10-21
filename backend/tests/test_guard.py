@@ -1,0 +1,69 @@
+import pytest
+
+from kisan import guard
+
+DOSES = [
+    "Spray imidacloprid 17.8 SL at 0.5 ml per litre of water.",
+    "| Mancozeb | 2 g/l |",
+    "Apply 2 bags of urea per acre.",
+    "Use 30-40 kg DAP per hectare at sowing.",
+    "दवाओं की मात्रा 2 ग्राम प्रति लीटर रखें।",
+    "गेहूं में 50 किलो यूरिया प्रति एकड़ डालें।",
+    "દવાનો છંટકાવ 15 લિટરના પંપમાં 30 મિલી કરો.",
+    "એકર દીઠ ૫૦ કિલો યુરિયા આપો.",
+    "kapas me 200 ml dawai per acre dalo.",
+]
+NOT_DOSES = [
+    "Plant seedlings 60 cm apart.",
+    "Irrigate every 10 days in winter.",
+    "Use a seed rate of 40 kg per acre.",
+    "Sow cumin seeds 1 to 2 cm deep.",
+    "Remove infected leaves and burn them.",
+    "A copper-based fungicide can help; ask the KVK which one.",
+    "ઘઉંમાં 20 દિવસે પિયત આપો.",
+    "टमाटर के पौधे 60 सेमी की दूरी पर लगाएं।",
+    "મારી સમજણમાં 100% ખાતરી છે.",
+]
+
+
+@pytest.mark.parametrize("s", DOSES)
+def test_doses_are_caught(s):
+    assert guard.is_dose(s)
+
+
+@pytest.mark.parametrize("s", NOT_DOSES)
+def test_other_quantities_are_kept(s):
+    assert not guard.is_dose(s)
+
+
+def test_brands_are_caught():
+    assert guard.names_brand("Confidor works well on whitefly.")
+    assert not guard.names_brand("Neem-based sprays can help.")
+
+
+def test_check_removes_only_dose_sentences_and_adds_kvk():
+    r = guard.check("**What to do now**\n- Spray mancozeb 2.5 g per litre. Remove spotted leaves.\n"
+                    "| Product | Dose |\n| Mancozeb | 2 g/l |", "dose of mancozeb?")
+    assert "2.5 g" not in r.text and "2 g/l" not in r.text
+    assert "Remove spotted leaves." in r.text
+    assert "| Product | Dose |" in r.text
+    assert len(r.removed) == 2
+    assert r.kvk_added and "Krishi Vigyan Kendra" in r.text
+
+
+def test_no_referral_for_a_question_with_no_chemicals():
+    r = guard.check("Irrigate every 10 days.", "How often should I water wheat?")
+    assert r.text == "Irrigate every 10 days." and not r.kvk_added and not r.removed
+
+
+def test_existing_referral_is_not_repeated():
+    r = guard.check("Ask your KVK which fungicide to use.", "which fungicide?")
+    assert not r.kvk_added
+
+
+def test_notes_follow_the_language():
+    r = guard.check("દવાનો છંટકાવ 15 લિટરના પંપમાં 30 મિલી કરો.", "કેટલી દવા?")
+    assert "કૃષિ વિજ્ઞાન કેન્દ્ર" in r.text
+    assert guard.script_language("ઘઉંમાં પિયત") == "gu"
+    assert guard.script_language("गेहूं की सिंचाई") == "hi"
+    assert guard.script_language("wheat irrigation") == "en"

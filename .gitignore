@@ -7,3 +7,7 @@
 __pycache__/
 *.pyc
 .venv/
+
+# Photo classifier backbone (fetched by backend/scripts/get_model.py)
+backend/models/*.onnx
+backend/models/*.part

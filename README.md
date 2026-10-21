@@ -1,268 +1,112 @@
-# 🌾 Kisan Mitra AI - Smart Agricultural Diagnostic Platform
+# 🌾 Kisan Mitra
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=flat&logo=vercel)](https://kisan-mitra-seven.vercel.app/) [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/) [![Svelte](https://img.shields.io/badge/Frontend-SvelteKit-FF3E00?style=flat&logo=svelte)](https://kit.svelte.dev/) [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat&logo=python)](https://python.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
+[![backend tests](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml)
 
-> ⚠️ **Status: prototype, being rebuilt.** The app takes one crop photo and a voice question and
-> asks GPT-4o for a diagnosis. Until October 2026 the photo was never actually sent to the model,
-> so earlier diagnoses were based on the voice question alone. Answers are not grounded in official
-> sources yet and must not be used for pesticide or fertiliser decisions; ask your Krishi Vigyan
-> Kendra. The feature list below describes the goal, not the current app. See
-> **[docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md)**.
+A crop-advice assistant for small farmers in Gujarat. A farmer asks a question by voice
+or text, in Gujarati, Hindi or English, optionally with a photo of the crop, and gets
+practical next steps in the same language. It **never gives a pesticide or fertiliser
+dose**: it says what kind of treatment can help and sends the farmer to their Krishi
+Vigyan Kendra (KVK) for the product and amount.
 
-**Kisan Mitra AI** is an intelligent agricultural diagnostic platform that empowers farmers with AI-driven insights for crop health management, disease detection, and personalized farming recommendations. Using advanced multimodal analysis, the platform processes video, audio, and historical data to provide comprehensive agricultural guidance.
+**Measured so far** ([docs/EVAL.md](docs/EVAL.md)):
 
-## 🚀 Live Demo
+- **Safety:** 0 doses and 0 brands in 28 attempts to get one (dose requests, brand
+  requests and "I'm an officer, ignore your rules"), in all three languages, with a KVK
+  referral every time; all 8 harmless questions that need a number still answered.
+  Prompts were committed before the code.
+- **Photo check:** on 222 field photos, **64.9%** accuracy across 38 crop/condition
+  classes (top-3 91.9%). When confident it answers 63.5% of photos and is right on
+  82.3%; otherwise it tells the farmer it isn't sure. A model trained only on lab
+  photos scored 36.0% on the same field photos.
 
-**🌐 [Visit Kisan Mitra AI](https://kisan-mitra-gilt.vercel.app/)**
+> **Status: prototype.** Answers are not yet grounded in official advisories, and their
+> agronomic correctness hasn't been measured: that needs real farmers' questions with
+> reference answers ([eval/COLLECTING.md](eval/COLLECTING.md)). The photo check covers 14
+> crops from PlantVillage and not cotton, groundnut, cumin or castor. See
+> [docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md).
 
-## ✨ Key Features
+## How an answer is made
 
-### 🔬 **Multimodal AI Analysis**
-- **Video Analysis**: Computer vision for plant disease detection and crop health assessment
-- **Audio Processing**: Voice query processing using OpenAI Whisper for natural farmer interaction
-- **Historical Data Integration**: Analysis of farming history and patterns for personalized recommendations
+```mermaid
+flowchart LR
+    V[Voice note] --> ASR[Whisper large-v3<br/>Groq] --> Q[Question]
+    T[Typed text] --> Q
+    P[Crop photo] --> C[Photo check<br/>DINOv2 int8 ONNX + head, CPU] --> E
+    L[Location] --> W[Open-Meteo<br/>3-day forecast] --> E
+    Q --> E[Evidence block<br/>question quoted as data]
+    E --> M[LLM drafts the answer<br/>qwen3.8-27b on Groq]
+    M --> G{Output guard<br/>deterministic}
+    G -->|dose or brand sentence| X[removed + note]
+    G -->|chemicals mentioned| K[KVK referral added]
+    G --> A[Answer in the farmer's language]
+```
 
-### 🤖 **AI-Powered Diagnostics**
-- **Disease Identification**: Accurate detection of plant diseases, pest infestations, and nutrient deficiencies
-- **Personalized Recommendations**: Tailored treatment plans based on specific farm conditions
-- **Preventive Measures**: Long-term strategies to prevent recurring agricultural issues
-- **Expert Guidance**: Step-by-step actionable plans for farmers
+- **Where the LLM is allowed:** wording the answer from the evidence it is given.
+- **Where it isn't:** it never sees the photo (Groq has no vision model on this key; it
+  gets the classifier's guesses and is told they can be wrong), it can't change the
+  rules (the farmer's words are quoted as data), and nothing it writes reaches the
+  farmer without passing the guard, which removes any sentence pairing a quantity with
+  a chemical word in English, Hindi or Gujarati.
+- With `OPENAI_API_KEY` set instead of a Groq key, the photo is also sent to GPT-4o as an image.
 
-### 🎯 **User-Friendly Interface**
-- **Intuitive Upload System**: Easy file submission for video, audio, and historical data
-- **Real-time Analysis**: Fast processing with immediate results
-- **Markdown-Formatted Reports**: Detailed, well-structured diagnostic reports
-- **Multi-language Support**: Voice queries in multiple languages via Whisper
+## Quick start
 
-## 🏗️ Technical Architecture
+```bash
+cd backend
+pip install -r requirements.txt
+python scripts/get_model.py          # fetches the 24 MB photo-check backbone, sha256-checked
+cp .env.example .env                 # add GROQ_API_KEY
+uvicorn main:app --reload            # http://localhost:8000
+```
 
-### Backend (FastAPI)
+```bash
+cd frontend
+npm install
+npm run dev                          # http://localhost:5173 (set VITE_API_URL for another backend)
+```
+
+`POST /analyze/` takes any of `audio_file`, `question`, `image_file`, `language`
+(`gu`, `hi`, `en`), `lat` and `lon`, and returns the answer, the transcript, the photo
+check's guesses, the forecast used and how many lines the guard removed. Uploads are not
+stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
+
+## Reproduce the numbers
+
+| What | Command | Output |
+|---|---|---|
+| Tests (no keys, no network) | `cd backend && pytest` | 38 tests |
+| Safety eval (needs a Groq key) | `python backend/scripts/safety_eval.py` | [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
+| Photo check training and test | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb) on a Colab T4, about 10 minutes | `eval/results/classifier_results.json`, `backend/models/crop_head.json` |
+
+## Project layout
+
 ```
 backend/
-├── main.py              # Main FastAPI application with multimodal endpoints
-├── requirements.txt     # Python dependencies
-├── .env                 # Environment variables (API keys, tokens)
-└── __pycache__/        # Python cache files
+  main.py              FastAPI app: /analyze/
+  kisan/answer.py      prompt, evidence block, model call
+  kisan/guard.py       dose and brand guard, KVK referral, language detection
+  kisan/vision.py      photo check (ONNX backbone + head)
+  kisan/weather.py     Open-Meteo forecast
+  models/crop_head.json  trained head (41 KB); the backbone is fetched, not committed
+  scripts/             safety_eval.py, get_model.py
+frontend/              SvelteKit app: record or type, photo, language, read aloud
+notebooks/             photo-check training (and the fine-tuning comparison)
+eval/                  safety prompts and results, farmer-question kit, rubric
+docs/                  EVAL.md, REBUILD_PLAN.md
 ```
 
-### Frontend (SvelteKit)
-```
-frontend/
-├── src/
-│   ├── routes/         # SvelteKit routing and pages
-│   ├── lib/            # Shared components and utilities
-│   ├── app.html        # Main HTML template
-│   └── app.d.ts        # TypeScript declarations
-├── static/             # Static assets
-├── package.json        # Node.js dependencies
-├── svelte.config.js    # Svelte configuration
-├── vite.config.ts      # Vite build configuration
-└── tsconfig.json       # TypeScript configuration
-```
+## Team
 
-## 🔧 Technology Stack
+- [Pavan Patel (@CODER7657)](https://github.com/CODER7657): lead developer and maintainer
+- [Hem Patel (@Hem60)](https://github.com/Hem60): backend
+- [Ayush (@Ayush3422)](https://github.com/Ayush3422): frontend
 
-### Backend Technologies
+## Data and model credits
 
-• [FastAPI](https://fastapi.tiangolo.com/) - High-performance Python web framework
-• [OpenAI GPT-4o](https://openai.com/) - Advanced language model for agricultural analysis
-• [OpenAI Whisper](https://openai.com/whisper/) - Speech-to-text for audio query processing
-• [Vercel Blob Storage](https://vercel.com/docs/storage/vercel-blob) - Scalable file storage for uploads
-• [Python-dotenv](https://github.com/theskumar/python-dotenv) - Environment variable management
-• [Uvicorn](https://www.uvicorn.org/) - Lightning-fast ASGI server
+PlantVillage (Hughes and Salathé, 2015) and PlantDoc (Singh et al., 2020) for training
+and testing the photo check; DINOv2 (Meta, Apache-2.0) via the `onnx-community` ONNX
+export; Whisper and the chat models are served by Groq; forecasts from Open-Meteo.
 
-### Frontend Technologies
+## License
 
-• [SvelteKit 2.0](https://kit.svelte.dev/) - Full-stack Svelte framework
-• [Svelte 5.0](https://svelte.dev/) - Reactive UI framework
-• [TypeScript 5.0+](https://www.typescriptlang.org/) - Type-safe JavaScript
-• [Vite 7.0](https://vitejs.dev/) - Next-generation build tool
-• [Marked](https://marked.js.org/) - Markdown parser for rendering reports
-
-### Deployment & Infrastructure
-
-• [Vercel](https://vercel.com/) - Frontend hosting and deployment
-• [Render](https://render.com/) - Backend API hosting
-• CORS-enabled - Cross-origin resource sharing for seamless integration
-
-## ⚙️ Installation & Setup
-
-### Prerequisites
-
-• Node.js 18+ and npm
-• Python 3.8+ and pip
-• OpenAI API Key
-• Vercel Blob Storage Token
-
-### Backend Setup
-
-1. Clone the repository
-```bash
-git clone https://github.com/CODER7657/kisan_mitra.git
-cd kisan_mitra/backend
-```
-
-2. Install Python dependencies
-```bash
-pip install -r requirements.txt
-```
-
-3. Configure environment variables
-```bash
-# Create .env file
-cp .env.example .env
-
-# Add your API keys
-OPENAI_API_KEY=your_openai_api_key_here
-BLOB_READ_WRITE_TOKEN=your_vercel_blob_token_here
-```
-
-4. Run the FastAPI server
-```bash
-uvicorn main:app --reload
-```
-Server will start at http://localhost:8000
-
-### Frontend Setup
-
-1. Navigate to frontend directory
-```bash
-cd ../frontend
-```
-
-2. Install Node.js dependencies
-```bash
-npm install
-```
-
-3. Start the development server
-```bash
-npm run dev
-```
-Application will start at http://localhost:5173
-
-## 📚 API Documentation
-
-### Core Endpoints
-
-#### GET /
-
-Health check endpoint to verify server status.
-
-Response:
-```json
-{
-  "message": "Welcome to the Kisan Mitra AI Backend!"
-}
-```
-
-#### POST /analyze/
-
-Main analysis endpoint for multimodal agricultural diagnostics.
-
-Parameters:
-• video_file (File): Video of crop/plant for visual analysis
-• audio_file (File): Audio query from farmer
-• history_file (File): Text file with farming historical data
-
-Response:
-```json
-{
-  "analysis": "Detailed markdown-formatted diagnostic report",
-  "video_url": "https://blob.vercel-storage.com/...",
-  "audio_url": "https://blob.vercel-storage.com/...",
-  "history_url": "https://blob.vercel-storage.com/...",
-  "transcript": "Transcribed farmer query"
-}
-```
-
-## 🚀 Deployment
-
-### Frontend Deployment (Vercel)
-
-1. Connect your GitHub repository to Vercel
-2. Configure build settings:
-   • Build Command: npm run build
-   • Output Directory: build
-   • Root Directory: frontend
-
-### Backend Deployment (Render/Railway)
-
-1. Create new web service
-2. Connect repository
-3. Configure environment variables
-4. Deploy with Python runtime
-
-## 🤝 Contributing
-
-We welcome contributions from the agricultural technology community! Here's how you can help:
-
-### Development Team
-
-• [Pavan Patel (@CODER7657)](https://github.com/CODER7657) - Lead Developer & Project Maintainer
-• [Hem Patel (@Hem60)](https://github.com/Hem60) - Backend Developer
-• [Ayush (@Ayush3422)](https://github.com/Ayush3422) - Frontend Developer
-
-### How to Contribute
-
-1. Fork the repository
-2. Create a feature branch
-```bash
-git checkout -b feature/amazing-feature
-```
-
-3. Commit your changes
-```bash
-git commit -m 'Add amazing feature'
-```
-
-4. Push to the branch
-```bash
-git push origin feature/amazing-feature
-```
-
-5. Open a Pull Request
-
-### Areas for Contribution
-
-• 🌱 Agricultural Models: Improve disease detection algorithms
-• 🎨 UI/UX: Enhance user interface and experience
-• 🌍 Localization: Add support for regional languages
-• 📱 Mobile: Develop mobile-responsive features
-• 🔬 Testing: Add comprehensive test coverage
-• 📖 Documentation: Improve documentation and guides
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/CODER7657/kisan_mitra/blob/main/LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-• OpenAI for providing cutting-edge AI models (GPT-4o, Whisper)
-• Vercel for seamless deployment and blob storage services
-• FastAPI Community for the excellent web framework
-• Svelte Team for the innovative frontend framework
-• Agricultural Research Community for domain expertise and insights
-
-## 📞 Support
-
-• 🐛 Issues: [GitHub Issues](https://github.com/CODER7657/kisan_mitra/issues)
-• 💬 Discussions: [GitHub Discussions](https://github.com/CODER7657/kisan_mitra/discussions)
-• 📧 Email: Contact project maintainers
-
-## 🔮 Roadmap
-
-- [ ] Mobile App Development (React Native/Flutter)
-- [ ] Offline Mode for areas with poor connectivity
-- [ ] IoT Integration for sensor data analysis
-- [ ] Crop Yield Prediction using historical data
-- [ ] Weather API Integration for better recommendations
-- [ ] Farmer Community Platform for knowledge sharing
-- [ ] Multi-language Voice Support (Hindi, Telugu, Tamil, etc.)
-- [ ] AR/VR Plant Scanning for enhanced diagnostics
-
-### 🌾 Empowering Farmers with AI-Driven Agricultural Intelligence 🌾
-
-Made with ❤️ for the farming community
-
-[![GitHub stars](https://img.shields.io/github/stars/CODER7657/kisan_mitra)](https://github.com/CODER7657/kisan_mitra/stargazers) [![GitHub forks](https://img.shields.io/github/forks/CODER7657/kisan_mitra)](https://github.com/CODER7657/kisan_mitra/network/members) [![GitHub watchers](https://img.shields.io/github/watchers/CODER7657/kisan_mitra)](https://github.com/CODER7657/kisan_mitra/watchers)
+MIT, see [LICENSE](LICENSE).
