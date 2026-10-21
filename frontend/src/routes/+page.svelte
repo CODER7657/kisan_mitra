@@ -1,110 +1,167 @@
 <script lang="ts">
 	import { marked } from 'marked';
 
-	// --- State Management ---
+	// Backend URL: set VITE_API_URL when building for production.
+	const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+
+	type Guess = { crop: string; condition: string; probability: number };
+	type Result = {
+		analysis: string;
+		transcript: string;
+		question: string;
+		language: string;
+		photo: { guesses: Guess[]; confident: boolean; crops_covered: string[] } | null;
+		weather: { source: string; days: { date: string; rain_mm: number; rain_chance_pct: number }[] } | null;
+		guard: { lines_removed: number; kvk_added: boolean };
+	};
+
 	let imageFile: FileList;
+	let question = '';
+	let language = '';
+	let useLocation = false;
 	let audioBlob: Blob | null = null;
 	let isRecording = false;
 	let mediaRecorder: MediaRecorder | null = null;
 
-	let isLoading = false; // To show a loading spinner
-	let error: string | null = null; // To display any errors
-	let analysisResult: string | null = null; // To store the AI's response
+	let isLoading = false;
+	let error: string | null = null;
+	let result: Result | null = null;
+	let analysisHtml = '';
 
-	// --- Audio Recording Handlers ---
 	async function startRecording() {
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 			mediaRecorder = new MediaRecorder(stream);
-			const audioChunks: BlobPart[] = [];
-
-			mediaRecorder.ondataavailable = (event) => {
-				audioChunks.push(event.data);
-			};
-
+			const chunks: BlobPart[] = [];
+			mediaRecorder.ondataavailable = (event) => chunks.push(event.data);
 			mediaRecorder.onstop = () => {
-				audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+				audioBlob = new Blob(chunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
+				stream.getTracks().forEach((t) => t.stop());
 			};
-
 			mediaRecorder.start();
 			isRecording = true;
 		} catch (err) {
-			error = 'Could not start recording. Please grant microphone permissions.';
-			console.error('Error starting recording:', err);
+			error = 'Could not start recording. Please allow microphone access.';
 		}
 	}
 
 	function stopRecording() {
-		if (mediaRecorder) {
-			mediaRecorder.stop();
-			isRecording = false;
+		mediaRecorder?.stop();
+		isRecording = false;
+	}
+
+	function position(): Promise<GeolocationPosition | null> {
+		return new Promise((resolve) =>
+			navigator.geolocation
+				? navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { timeout: 8000 })
+				: resolve(null)
+		);
+	}
+
+	// The answer comes from a model, so any HTML in it is shown as text, never run.
+	function safeMarkdown(md: string): string {
+		const escaped = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+		return marked(escaped) as string;
+	}
+
+	function readAloud() {
+		if (!result || !('speechSynthesis' in window)) return;
+		const u = new SpeechSynthesisUtterance(result.analysis.replace(/[*#|_>]/g, ''));
+		u.lang = { gu: 'gu-IN', hi: 'hi-IN' }[result.language] ?? 'en-IN';
+		speechSynthesis.cancel();
+		speechSynthesis.speak(u);
+	}
+
+	async function handleSubmit() {
+		error = null;
+		result = null;
+		if (!audioBlob && !question.trim()) {
+			error = 'Record your question or type it.';
+			return;
+		}
+		isLoading = true;
+		const formData = new FormData();
+		if (imageFile?.[0]) formData.append('image_file', imageFile[0]);
+		if (audioBlob) {
+			const ext = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'm4a' : 'webm';
+			formData.append('audio_file', audioBlob, `question.${ext}`);
+		}
+		if (question.trim()) formData.append('question', question.trim());
+		if (language) formData.append('language', language);
+		if (useLocation) {
+			const pos = await position();
+			if (pos) {
+				formData.append('lat', String(pos.coords.latitude));
+				formData.append('lon', String(pos.coords.longitude));
+			}
+		}
+		try {
+			const response = await fetch(`${API_URL}/analyze/`, { method: 'POST', body: formData });
+			const data = await response.json();
+			if (!response.ok) throw new Error(data.detail || `HTTP error ${response.status}`);
+			result = data;
+			analysisHtml = safeMarkdown(data.analysis);
+		} catch (e: any) {
+			error = e.message || 'Something went wrong. Please try again.';
+		} finally {
+			isLoading = false;
 		}
 	}
 
-	// --- Form Submission Handler ---
-	async function handleSubmit() {
-		// 1. Reset state and validate inputs
-		isLoading = true;
-		error = null;
-		analysisResult = null;
-
-		if (!imageFile?.[0] || !audioBlob) {
-			error = 'Please select an image and record audio before analyzing.';
-			isLoading = false;
-			return;
-		}
-
-		// 2. Prepare form data for the backend
-		const formData = new FormData();
-		formData.append('image_file', imageFile[0]);
-		formData.append('audio_file', audioBlob, 'recorded_audio.wav');
-
-		// 3. Send data to the FastAPI backend
-		try {
-			// =================== THIS IS THE LINE TO FIX ===================
-			const response = await fetch('https://kisan-mitra-g4jn.onrender.com/analyze/', {
-			// ===============================================================
-				method: 'POST',
-				body: formData
-			});
-
-			if (!response.ok) {
-				const errorData = await response.json();
-				throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-			}
-
-			const data = await response.json();
-
-			// 4. Update the UI with the result
-			analysisResult = marked(data.analysis) as string;
-		} catch (e: any) {
-			console.error('An error occurred during fetch:', e);
-			error = e.message || 'An unknown error occurred. Please check the console.';
-		} finally {
-			// 5. Stop the loading indicator
-			isLoading = false;
-		}
+	function reset() {
+		result = null;
+		audioBlob = null;
+		question = '';
+		speechSynthesis?.cancel();
 	}
 </script>
 
 <main class="container">
 	<header>
 		<h1>🌾 Kisan Mitra AI</h1>
-		<p>Your AI-powered agricultural diagnostic assistant.</p>
+		<p>Ask about your crop by voice or text, in Gujarati, Hindi or English. A photo helps.</p>
 	</header>
 
 	{#if isLoading}
 		<div class="loading-container">
-			<div class="spinner" />
-			<p>Analyzing your data... This may take a moment.</p>
+			<div class="spinner"></div>
+			<p>Working on your answer...</p>
 		</div>
-	{:else if analysisResult}
+	{:else if result}
 		<div class="results-card">
-			<h2>Analysis Complete</h2>
+			{#if result.transcript}
+				<p class="meta"><strong>You said:</strong> {result.transcript}</p>
+			{/if}
+			{#if result.photo}
+				<div class="photo-check" class:unsure={!result.photo.confident}>
+					<strong>Automatic photo check:</strong>
+					{#if result.photo.confident}
+						{result.photo.guesses[0].crop}, {result.photo.guesses[0].condition}
+						({Math.round(result.photo.guesses[0].probability * 100)}%). It can be wrong.
+					{:else}
+						not sure. It only knows {result.photo.crops_covered.length} crops
+						({result.photo.crops_covered.join(', ')}), so the answer relies on your question.
+					{/if}
+				</div>
+			{/if}
 			<div class="markdown-content">
-				{@html analysisResult}
+				{@html analysisHtml}
 			</div>
-			<button on:click={() => (analysisResult = null)}>Start New Analysis</button>
+			{#if result.weather}
+				<p class="meta">
+					Weather ({result.weather.source}):
+					{#each result.weather.days as d}
+						<span class="day">{d.date}: rain {d.rain_mm} mm ({d.rain_chance_pct}%)</span>
+					{/each}
+				</p>
+			{/if}
+			{#if result.guard.lines_removed > 0}
+				<p class="meta">Safety check removed {result.guard.lines_removed} line(s) that gave a chemical dose.</p>
+			{/if}
+			<div class="actions">
+				<button type="button" on:click={readAloud}>🔊 Read aloud</button>
+				<button type="button" class="secondary" on:click={reset}>Ask another question</button>
+			</div>
 		</div>
 	{:else}
 		<form on:submit|preventDefault={handleSubmit} class="upload-form">
@@ -113,22 +170,41 @@
 			{/if}
 
 			<div class="file-input-group">
-				<label for="image">1. Upload Crop Image</label>
-				<input type="file" id="image" accept="image/*" bind:files={imageFile} required />
-				<span>{imageFile?.[0]?.name || 'No file selected'}</span>
+				<label for="audio">1. Speak your question</label>
+				{#if isRecording}
+					<button type="button" on:click={stopRecording}>Stop recording</button>
+				{:else}
+					<button type="button" on:click={startRecording}>Start recording</button>
+				{/if}
+				<span>{audioBlob ? 'Recorded' : 'Nothing recorded yet'}</span>
+				<textarea bind:value={question} rows="2" placeholder="...or type it here"></textarea>
 			</div>
 
 			<div class="file-input-group">
-				<label for="audio">2. Record Audio Query</label>
-				{#if isRecording}
-					<button type="button" on:click={stopRecording}>Stop Recording</button>
-				{:else}
-					<button type="button" on:click={startRecording}>Start Recording</button>
-				{/if}
-				<span>{audioBlob ? 'Audio Recorded' : 'No audio recorded'}</span>
+				<label for="image">2. Add a photo of the crop (optional)</label>
+				<input type="file" id="image" accept="image/*" capture="environment" bind:files={imageFile} />
+				<label for="image" class="pick">Choose photo</label>
+				<span>{imageFile?.[0]?.name || 'No photo'}</span>
 			</div>
 
-			<button type="submit" disabled={isLoading}>Analyze Farm Data</button>
+			<div class="options">
+				<label>
+					Language
+					<select bind:value={language}>
+						<option value="">Detect</option>
+						<option value="gu">ગુજરાતી</option>
+						<option value="hi">हिन्दी</option>
+						<option value="en">English</option>
+					</select>
+				</label>
+				<label><input type="checkbox" bind:checked={useLocation} /> Use my location for the weather</label>
+			</div>
+
+			<button type="submit">Get advice</button>
+			<p class="note">
+				Kisan Mitra never gives pesticide or fertiliser doses. Confirm any chemical with your Krishi
+				Vigyan Kendra (KVK).
+			</p>
 		</form>
 	{/if}
 </main>
@@ -278,4 +354,70 @@
         line-height: 1.6;
     }
 
+	textarea, select {
+		width: 100%;
+		box-sizing: border-box;
+		margin-top: 0.75rem;
+		padding: 0.6rem;
+		font-size: 1rem;
+		border: 1px solid #ccc;
+		border-radius: 8px;
+		font-family: inherit;
+	}
+
+	.pick {
+		display: inline-block;
+		padding: 0.5rem 1rem;
+		background: #e8f5e9;
+		border-radius: 8px;
+		cursor: pointer;
+	}
+
+	.options {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.note, .meta {
+		font-size: 0.9rem;
+		color: #555;
+	}
+
+	.photo-check {
+		padding: 0.75rem 1rem;
+		border-radius: 8px;
+		background: #e8f5e9;
+		margin-bottom: 1rem;
+	}
+
+	.photo-check.unsure {
+		background: #fff8e1;
+	}
+
+	.day {
+		margin-right: 0.75rem;
+		white-space: nowrap;
+	}
+
+	.actions {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		margin-top: 1rem;
+	}
+
+	button.secondary {
+		background-color: #607d8b;
+	}
+
+	@media (max-width: 600px) {
+		:global(body) {
+			padding: 0.5rem;
+		}
+		.container {
+			padding: 1.25rem 1rem;
+		}
+	}
 </style>
+
