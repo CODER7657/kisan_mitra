@@ -14,6 +14,9 @@ Aim for 20 questions from 3–5 farmers.
 
 ## What to ask
 
+A ready-to-read interview in Gujarati, with English alongside, is in
+[`FARMER_INTERVIEW_GU.md`](FARMER_INTERVIEW_GU.md).
+
 "What did you last want to ask an expert about your crops?" works better than
 "what would you ask an app?". Let them talk; write the question in their words.
 
