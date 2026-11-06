@@ -1,0 +1,23 @@
+# Render Blueprint for the backend (free web service). Render: New > Blueprint > this repo.
+# Secrets are marked sync: false, so Render asks for them in its dashboard; none live here.
+services:
+  - type: web
+    name: kisan-mitra-api
+    runtime: python
+    plan: free
+    region: singapore # closest free region to Gujarat
+    rootDir: backend
+    # get_model.py fetches the 24 MB photo classifier, pinned and checked by sha256.
+    buildCommand: pip install -r requirements.txt && python scripts/get_model.py
+    # One worker: two would each load the classifier, and free instances have 512 MB.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: GROQ_API_KEY
+        sync: false
+      # The Vercel site's origin, e.g. https://kisan-mitra-gilt.vercel.app (comma separated, no path)
+      - key: ALLOWED_ORIGINS
+        sync: false

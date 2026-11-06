@@ -23,6 +23,9 @@ MODEL_DIR = Path(os.getenv("CROP_MODEL_DIR", Path(__file__).resolve().parent.par
 BACKBONE_FILE = "dinov2_small_int8.onnx"
 HEAD_FILE = "crop_head.json"
 INPUT = {"size": 224, "resize_short_side": 256, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+# A small file can decode to a huge image: a 0.45 MB PNG of 12000x12000 took 1.3 GB, past a
+# free host's 512 MB. Normal phone photos (12 MP) are well under this.
+MAX_PIXELS = 30_000_000
 
 
 def readable(label: str) -> tuple[str, str]:
@@ -58,6 +61,19 @@ def available() -> bool:
     return (MODEL_DIR / BACKBONE_FILE).exists() and (MODEL_DIR / HEAD_FILE).exists()
 
 
+def open_photo(image_bytes: bytes) -> Image.Image:
+    """Read the header and refuse images too big to decode. A JPEG above about 4000x3600
+    (a 48 MP phone photo, say) is decoded at half or quarter scale; smaller ones, including
+    normal 12 MP photos, are decoded in full exactly as before."""
+    image = Image.open(io.BytesIO(image_bytes))
+    if image.format == "JPEG":
+        image.draft("RGB", (1792, 1792))
+    w, h = image.size
+    if w * h > MAX_PIXELS:
+        raise ValueError(f"photo is {w}x{h}, over {MAX_PIXELS} pixels")
+    return image
+
+
 def preprocess(image: Image.Image, spec: dict = INPUT) -> np.ndarray:
     """Resize the short side, centre-crop and normalise, exactly as in the training notebook."""
     size, short = spec["size"], spec["resize_short_side"]
@@ -89,8 +105,8 @@ def classify(image_bytes: bytes, top_k: int = 3) -> dict | None:
     """Top guesses with probabilities, or None if the model isn't installed."""
     if not available():
         return None
+    x = preprocess(open_photo(image_bytes))
     session, head = _load()
-    x = preprocess(Image.open(io.BytesIO(image_bytes)))
     p = probabilities(head, features(session, x))[0]
     guesses = []
     for i in np.argsort(-p)[:top_k]:

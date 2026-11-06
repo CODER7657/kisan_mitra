@@ -1,8 +1,16 @@
 <script lang="ts">
 	import { marked } from 'marked';
+	import { onMount } from 'svelte';
+	import { readReply, resolveApiUrl } from '$lib/api';
 
-	// Backend URL: set VITE_API_URL when building for production.
-	const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+	// Backend URL: set VITE_API_URL when building for production. Null means no backend is
+	// configured, and the page says the service is unavailable instead of calling localhost.
+	const API_URL = resolveApiUrl(import.meta.env.VITE_API_URL, import.meta.env.DEV);
+
+	// A free-tier backend sleeps when idle; start waking it while the farmer fills the form.
+	onMount(() => {
+		if (API_URL) fetch(`${API_URL}/health`).catch(() => {});
+	});
 
 	type Guess = { crop: string; condition: string; probability: number };
 	type Result = {
@@ -75,6 +83,7 @@
 	async function handleSubmit() {
 		error = null;
 		result = null;
+		if (!API_URL) return;
 		if (!audioBlob && !question.trim()) {
 			error = 'Record your question or type it.';
 			return;
@@ -96,9 +105,11 @@
 			}
 		}
 		try {
-			const response = await fetch(`${API_URL}/analyze/`, { method: 'POST', body: formData });
-			const data = await response.json();
-			if (!response.ok) throw new Error(data.detail || `HTTP error ${response.status}`);
+			const response = await fetch(`${API_URL}/analyze/`, { method: 'POST', body: formData }).catch(() => {
+				// fetch rejects only when the backend can't be reached at all
+				throw new Error('Could not reach the service. Check your connection and try again.');
+			});
+			const data = await readReply(response);
 			result = data;
 			analysisHtml = safeMarkdown(data.analysis);
 		} catch (e: any) {
@@ -122,10 +133,15 @@
 		<p>Ask about your crop by voice or text, in Gujarati, Hindi or English. A photo helps.</p>
 	</header>
 
-	{#if isLoading}
+	{#if !API_URL}
+		<div class="error-message" role="alert">
+			<strong>Service unavailable.</strong> This copy of Kisan Mitra is not connected to its server yet.
+			Please try again later.
+		</div>
+	{:else if isLoading}
 		<div class="loading-container">
 			<div class="spinner"></div>
-			<p>Working on your answer...</p>
+			<p>Working on your answer... The first question after a quiet spell can take up to a minute.</p>
 		</div>
 	{:else if result}
 		<div class="results-card">

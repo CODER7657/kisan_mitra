@@ -70,11 +70,27 @@ npm run dev                          # http://localhost:5173 (set VITE_API_URL f
 check's guesses, the forecast used and how many lines the guard removed. Uploads are not
 stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 
+## Deploy (free tiers)
+
+The backend runs on a Render free web service from [render.yaml](render.yaml); the
+frontend is static files on Vercel (`adapter-static`). Steps: [docs/DEPLOY.md](docs/DEPLOY.md).
+
+- `GET /health` returns `{"status": "ok"}` for Render's health check and uptime pings.
+- A production frontend build fails unless `VITE_API_URL` is a public `https` URL, so it can
+  never ship a page that calls `localhost`.
+- Memory, measured on Windows with one uvicorn worker: 76 MB after start, 280 MB peak
+  classifying a 12 MP photo, 313 MB at the largest photo accepted (`MAX_PIXELS`, 30 MP);
+  Render's free tier gives 512 MB. Bigger images are refused with a 400 before decoding,
+  and JPEGs above about 4000x3600 are decoded at reduced scale.
+- Free instances sleep after 15 idle minutes; the first request after that waits for a cold
+  start (about a minute). The page pings `/health` on load to start waking it early.
+
 ## Reproduce the numbers
 
 | What | Command | Output |
 |---|---|---|
-| Tests (no keys, no network) | `cd backend && pytest` | 38 tests |
+| Tests (no keys, no network) | `cd backend && pytest` | 55 tests |
+| Frontend tests | `cd frontend && npm test` | 22 tests |
 | Safety eval (needs a Groq key) | `python backend/scripts/safety_eval.py` | [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
 | Photo check training and test | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb) on a Colab T4, about 10 minutes | `eval/results/classifier_results.json`, `backend/models/crop_head.json` |
 
