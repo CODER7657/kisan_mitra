@@ -4,10 +4,16 @@
 """
 
 import base64
+import io
 import types
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
+
+from kisan import vision
+
+REAL_CLASSIFY = vision.classify
 
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -119,3 +125,19 @@ def test_uploads_are_not_stored_by_default(app, monkeypatch):
 def test_root_reports_configuration(app, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-not-real")
     assert app["client"].get("/").json()["provider"] == "groq"
+
+
+
+def test_oversized_photo_is_a_400_not_a_crash(app, monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-not-real")
+    monkeypatch.setattr(vision, "classify", REAL_CLASSIFY)
+    monkeypatch.setattr(vision, "available", lambda: True)
+    monkeypatch.setattr(vision, "_load", lambda: pytest.fail("the model must not load for a refused photo"))
+    monkeypatch.setattr(vision, "MAX_PIXELS", 64 * 64)
+    buf = io.BytesIO()
+    Image.new("RGB", (65, 64)).save(buf, "PNG")
+    r = app["client"].post("/analyze/", files={"image_file": ("big.png", buf.getvalue(), "image/png")},
+                           data={"question": "what is wrong?"})
+    assert r.status_code == 400
+    assert "photo could not be read" in r.json()["detail"]
+    assert "chat" not in app["calls"]

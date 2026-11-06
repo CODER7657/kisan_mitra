@@ -56,3 +56,32 @@ def test_installed_model_returns_a_ranked_guess():
     probs = [g["probability"] for g in r["guesses"]]
     assert len(probs) == 3 and probs == sorted(probs, reverse=True) and 0 < sum(probs) <= 1.001
     assert len(r["crops_covered"]) == 14
+
+
+def encoded(size, fmt):
+    buf = io.BytesIO()
+    Image.new("RGB", size, (40, 120, 40)).save(buf, fmt)
+    return buf.getvalue()
+
+
+def test_oversized_photo_is_refused_before_decoding(monkeypatch):
+    monkeypatch.setattr(vision, "MAX_PIXELS", 100 * 100)
+    with pytest.raises(ValueError, match="over 10000 pixels"):
+        vision.open_photo(encoded((101, 100), "PNG"))
+    assert vision.open_photo(encoded((100, 100), "PNG")).size == (100, 100)
+
+
+def test_phone_sized_jpeg_is_decoded_in_full():
+    assert vision.open_photo(encoded((4000, 3000), "JPEG")).size == (4000, 3000)
+
+
+def test_very_large_jpeg_is_decoded_at_reduced_scale():
+    # 48 MP would pass MAX_PIXELS only because the JPEG decoder scales it down first
+    image = vision.open_photo(encoded((8000, 6000), "JPEG"))
+    assert image.size == (4000, 3000)
+    assert vision.preprocess(image).shape == (1, 3, 224, 224)
+
+
+def test_not_an_image_is_an_error():
+    with pytest.raises(Exception):
+        vision.open_photo(b"definitely not a photo")

@@ -4,6 +4,7 @@ import logging
 import mimetypes
 import os
 import uuid
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -16,11 +17,36 @@ log = logging.getLogger("kisan_mitra")
 
 app = FastAPI(title="Kisan Mitra AI Backend")
 
-# Origins allowed to call the API: local dev servers plus anything in ALLOWED_ORIGINS (comma separated).
-origins = ["http://localhost:5173", "http://localhost:3000"] + [
-    o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()
-]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST"], allow_headers=["*"])
+DEV_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
+
+
+def allowed_origins(value: str | None) -> list[str]:
+    """Local dev servers plus each origin in ALLOWED_ORIGINS (comma separated).
+
+    A browser sends a bare origin (scheme://host[:port]), so a pasted page URL is cut down
+    to its origin, and an entry without a scheme is dropped; both are logged, since a CORS
+    mismatch otherwise fails silently in the visitor's browser.
+    """
+    origins = list(DEV_ORIGINS)
+    for entry in (o.strip() for o in (value or "").split(",")):
+        if not entry:
+            continue
+        if entry == "*":  # any site; fine for a public API that uses no cookies
+            origins.append(entry)
+            continue
+        parts = urlsplit(entry)
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            log.warning("ALLOWED_ORIGINS: ignoring %r, expected e.g. https://example.org", entry)
+            continue
+        origin = f"{parts.scheme}://{parts.netloc}"
+        if origin != entry.rstrip("/"):
+            log.warning("ALLOWED_ORIGINS: using %r for %r (an origin has no path)", origin, entry)
+        origins.append(origin)
+    return list(dict.fromkeys(origins))
+
+
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(os.getenv("ALLOWED_ORIGINS")),
+                   allow_methods=["GET", "POST"], allow_headers=["*"])
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
@@ -44,6 +70,12 @@ def read_root():
     p = config.provider()
     return {"message": "Welcome to the Kisan Mitra AI Backend!", "provider": p.name if p else None,
             "photo_classifier": vision.available()}
+
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health():
+    """For the host's health check and uptime pings: cheap, no model calls, nothing secret."""
+    return {"status": "ok"}
 
 
 @app.post("/analyze/")
