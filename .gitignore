@@ -10,4 +10,6 @@ __pycache__/
 
 # Photo classifier backbone (fetched by backend/scripts/get_model.py)
 backend/models/*.onnx
+!backend/models/dinov2_small_int8.onnx
 backend/models/*.part
+.vercel

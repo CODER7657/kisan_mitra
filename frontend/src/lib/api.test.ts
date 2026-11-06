@@ -63,6 +63,11 @@ describe('readReply', () => {
 		await expect(readReply(reply(502, '<html>Bad Gateway</html>', 'text/html'))).rejects.toThrow(/starting up/);
 	});
 
+	it("explains the host's HTML 413 for an upload that is too large", async () => {
+		await expect(readReply(new Response('<html>Request Entity Too Large</html>', { status: 413 }))).rejects.toThrow(
+			'too large to send'
+		);
+	});
 	it('gives a plain message for other non-JSON failures', async () => {
 		await expect(readReply(reply(500, 'oops', 'text/plain'))).rejects.toThrow('HTTP 500');
 	});

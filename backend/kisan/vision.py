@@ -19,8 +19,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from kisan import model_store
+
 MODEL_DIR = Path(os.getenv("CROP_MODEL_DIR", Path(__file__).resolve().parent.parent / "models"))
-BACKBONE_FILE = "dinov2_small_int8.onnx"
+BACKBONE_FILE = model_store.FILENAME
 HEAD_FILE = "crop_head.json"
 INPUT = {"size": 224, "resize_short_side": 256, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
 # A small file can decode to a huge image: a 0.45 MB PNG of 12000x12000 took 1.3 GB, past a
@@ -53,12 +55,19 @@ def load_head(path: Path) -> dict:
 def _load():
     import onnxruntime as ort
 
-    session = ort.InferenceSession(str(MODEL_DIR / BACKBONE_FILE), providers=["CPUExecutionProvider"])
+    path = model_store.backbone_path(MODEL_DIR)
+    if path is None:
+        raise FileNotFoundError("photo classifier backbone is not available")
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
     return session, load_head(MODEL_DIR / HEAD_FILE)
 
 
 def available() -> bool:
-    return (MODEL_DIR / BACKBONE_FILE).exists() and (MODEL_DIR / HEAD_FILE).exists()
+    """True when a photo can be classified: the head is here, and the backbone is or may be fetched."""
+    if not (MODEL_DIR / HEAD_FILE).exists():
+        return False
+    return ((MODEL_DIR / BACKBONE_FILE).exists() or model_store.fetch_allowed()
+            or (model_store.cache_dir() / BACKBONE_FILE).exists())
 
 
 def open_photo(image_bytes: bytes) -> Image.Image:

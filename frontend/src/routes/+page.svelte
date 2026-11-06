@@ -2,12 +2,13 @@
 	import { marked } from 'marked';
 	import { onMount } from 'svelte';
 	import { readReply, resolveApiUrl } from '$lib/api';
+	import { MAX_RECORDING_MS, shrinkPhoto, tooLargeMessage } from '$lib/upload';
 
 	// Backend URL: set VITE_API_URL when building for production. Null means no backend is
 	// configured, and the page says the service is unavailable instead of calling localhost.
 	const API_URL = resolveApiUrl(import.meta.env.VITE_API_URL, import.meta.env.DEV);
 
-	// A free-tier backend sleeps when idle; start waking it while the farmer fills the form.
+	// A serverless backend may be cold after a quiet spell; start it while the farmer fills the form.
 	onMount(() => {
 		if (API_URL) fetch(`${API_URL}/health`).catch(() => {});
 	});
@@ -48,6 +49,11 @@
 			};
 			mediaRecorder.start();
 			isRecording = true;
+			// Keep recordings short enough to upload; one minute is plenty for a question.
+			const recorder = mediaRecorder;
+			setTimeout(() => {
+				if (recorder.state === 'recording') stopRecording();
+			}, MAX_RECORDING_MS);
 		} catch (err) {
 			error = 'Could not start recording. Please allow microphone access.';
 		}
@@ -90,7 +96,17 @@
 		}
 		isLoading = true;
 		const formData = new FormData();
-		if (imageFile?.[0]) formData.append('image_file', imageFile[0]);
+		const photo = imageFile?.[0] ? await shrinkPhoto(imageFile[0]) : null;
+		const tooLarge = tooLargeMessage((photo?.size ?? 0) + (audioBlob?.size ?? 0));
+		if (tooLarge) {
+			error = tooLarge;
+			isLoading = false;
+			return;
+		}
+		if (photo && imageFile?.[0]) {
+			const name = photo === imageFile[0] ? imageFile[0].name : 'photo.jpg';
+			formData.append('image_file', photo, name);
+		}
 		if (audioBlob) {
 			const ext = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'm4a' : 'webm';
 			formData.append('audio_file', audioBlob, `question.${ext}`);
