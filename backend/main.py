@@ -3,11 +3,13 @@
 import logging
 import mimetypes
 import os
+import time
 import uuid
+from collections import defaultdict, deque
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from kisan import answer, config, vision, weather
@@ -52,6 +54,40 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
 
+class RateLimiter:
+    """At most `limit` requests per client per `window` seconds, in this process.
+
+    On serverless hosts each instance keeps its own count, so this is a speed bump against
+    a script draining the free LLM quota, not an exact global limit.
+    """
+
+    def __init__(self, limit: int, window: float = 60.0, clock=time.monotonic):
+        self.limit, self.window, self.clock = limit, window, clock
+        self.hits: dict[str, deque] = defaultdict(deque)
+
+    def allow(self, key: str) -> bool:
+        now = self.clock()
+        q = self.hits[key]
+        while q and now - q[0] >= self.window:
+            q.popleft()
+        if len(q) >= self.limit:
+            return False
+        q.append(now)
+        if len(self.hits) > 10_000:  # forget idle clients so memory stays bounded
+            for k in [k for k, v in self.hits.items() if not v]:
+                del self.hits[k]
+        return True
+
+
+limiter = RateLimiter(int(os.getenv("RATE_LIMIT_PER_MIN", "12")))
+
+
+def client_key(request: Request) -> str:
+    """The visitor's IP: the first address in X-Forwarded-For when a proxy (Vercel) sets it."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+
+
 def store(data: bytes, filename: str, content_type: str) -> str | None:
     """Optionally keep uploads in Vercel Blob, under a random path. Off unless STORE_UPLOADS=1."""
     token = os.getenv("BLOB_READ_WRITE_TOKEN")
@@ -80,6 +116,7 @@ def health():
 
 @app.post("/analyze/")
 async def analyze_farm_data(
+    request: Request,
     image_file: UploadFile | None = File(None),
     audio_file: UploadFile | None = File(None),
     question: str | None = Form(None),
@@ -88,6 +125,8 @@ async def analyze_farm_data(
     lon: float | None = Form(None),
 ):
     """A spoken or typed question, with an optional crop photo and location, answered and checked."""
+    if not limiter.allow(client_key(request)):
+        raise HTTPException(429, "Too many questions in a minute. Please wait a little and try again.")
     p = config.provider()
     if p is None:
         raise HTTPException(503, "No model provider configured: set GROQ_API_KEY or OPENAI_API_KEY.")

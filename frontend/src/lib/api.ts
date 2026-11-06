@@ -33,6 +33,9 @@ export async function readReply(response: Response): Promise<any> {
 	}
 	if (response.ok && data) return data;
 	if (data && typeof data.detail === 'string') throw new Error(data.detail);
+	if (response.status === 413) {
+		throw new Error('The photo or recording is too large to send. Use a smaller photo or a shorter recording.');
+	}
 	if ([502, 503, 504].includes(response.status)) {
 		throw new Error('The service is starting up or busy. Please try again in a minute.');
 	}
