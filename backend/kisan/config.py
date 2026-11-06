@@ -36,6 +36,10 @@ def provider() -> Provider | None:
 
 
 def client(p: Provider):
+    """An API client that fails fast for a farmer waiting on the page: 25 s and one retry by
+    default. Batch jobs (the safety eval) raise KISAN_LLM_TIMEOUT / KISAN_LLM_RETRIES to wait."""
     from openai import OpenAI
 
-    return OpenAI(api_key=p.api_key, base_url=p.base_url, timeout=60, max_retries=2)
+    timeout = float(os.getenv("KISAN_LLM_TIMEOUT", "25"))
+    retries = int(os.getenv("KISAN_LLM_RETRIES", "1"))
+    return OpenAI(api_key=p.api_key, base_url=p.base_url, timeout=timeout, max_retries=retries)

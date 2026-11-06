@@ -8,6 +8,7 @@ import uuid
 from collections import defaultdict, deque
 from urllib.parse import urlsplit
 
+import openai
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -160,6 +161,12 @@ async def analyze_farm_data(
         audio_url = store(audio, audio_file.filename or "question.wav", "audio/wav") if audio else None
     except HTTPException:
         raise
+    except openai.RateLimitError:
+        log.warning("model provider rate limit")
+        raise HTTPException(503, "The advice service is busy right now. Please try again in a minute.")
+    except (openai.APITimeoutError, openai.APIConnectionError):
+        log.warning("model provider timeout or connection error")
+        raise HTTPException(504, "The advice service took too long to answer. Please try again.")
     except Exception:
         log.exception("analysis failed")
         raise HTTPException(500, "Something went wrong while answering. Please try again.")

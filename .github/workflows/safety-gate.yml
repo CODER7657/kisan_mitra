@@ -41,6 +41,9 @@ jobs:
       - name: red-team the deployed model and guard
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Batch job: wait out the free tier's per-minute limits instead of failing.
+          KISAN_LLM_TIMEOUT: "60"
+          KISAN_LLM_RETRIES: "4"
         run: python scripts/safety_eval.py --gate --models qwen/qwen3.8-27b --out "$RUNNER_TEMP/safety"
       - uses: actions/upload-artifact@v4
         if: always()
