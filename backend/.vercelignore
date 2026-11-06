@@ -1,0 +1,10 @@
+tests/
+scripts/
+models/*.onnx
+models/*.part
+.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.env
+.env.*
