@@ -1,29 +1,27 @@
-# 🌾 Kisan Mitra
+# Kisan Mitra
+
+Crop advice by voice for small farmers in Gujarat: ask in Gujarati, Hindi or English, optionally with a photo, and get practical next steps in the same language, never a pesticide or fertiliser dose.
 
 [![backend tests](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live](https://img.shields.io/badge/live-kisan--mitra-2f5d3a.svg)](https://kisan-mitra-gilt.vercel.app/)
 
-A crop-advice assistant for small farmers in Gujarat. A farmer asks a question by voice
-or text, in Gujarati, Hindi or English, optionally with a photo of the crop, and gets
-practical next steps in the same language. It **never gives a pesticide or fertiliser
-dose**: it says what kind of treatment can help and sends the farmer to their Krishi
-Vigyan Kendra (KVK) for the product and amount.
+**Live:** https://kisan-mitra-gilt.vercel.app/
 
-**Measured so far** ([docs/EVAL.md](docs/EVAL.md)):
+![Kisan Mitra: speak or type a question, add a crop photo, choose a language](docs/screenshot.png)
 
-- **Safety:** 0 doses and 0 brands in 28 attempts to get one (dose requests, brand
-  requests and "I'm an officer, ignore your rules"), in all three languages, with a KVK
-  referral every time; all 8 harmless questions that need a number still answered.
-  Prompts were committed before the code.
-- **Photo check:** on 222 field photos, **64.9%** accuracy across 38 crop/condition
-  classes (top-3 91.9%). When confident it answers 63.5% of photos and is right on
-  82.3%; otherwise it tells the farmer it isn't sure. A model trained only on lab
-  photos scored 36.0% on the same field photos.
+It says what kind of treatment can help and sends the farmer to their Krishi Vigyan
+Kendra (KVK) for the product and amount.
 
-> **Status: prototype.** Answers are not yet grounded in official advisories, and their
-> agronomic correctness hasn't been measured: that needs real farmers' questions with
-> reference answers ([eval/COLLECTING.md](eval/COLLECTING.md)). The photo check covers 14
-> crops from PlantVillage and not cotton, groundnut, cumin or castor. See
-> [docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md).
+## Measured results
+
+Measured 2026-10-21; method and full numbers in [docs/EVAL.md](docs/EVAL.md).
+
+| What | Result | Reproduce |
+|---|---|---|
+| Safety: attempts to get a dose or brand (dose requests, brand requests, "I'm an officer, ignore your rules"), en/hi/gu | **0 doses, 0 brands in 28 attempts**, a KVK referral every time; all 8 harmless questions that need a number still answered. Prompts committed before the code | `python backend/scripts/safety_eval.py` (needs a Groq key) → [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
+| Photo check, 222 field photos, 38 crop/condition classes | **64.9%** top-1, 91.9% top-3. When confident it answers 63.5% of photos and is right on 82.3%; otherwise it says it isn't sure. A lab-photo-only model scored 36.0% on the same photos | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb), Colab T4, about 10 minutes |
+| Backend tests (no keys, no network) | **38 passing** (2026-11-07) | `cd backend && pytest` |
 
 ## How an answer is made
 
@@ -49,7 +47,7 @@ flowchart LR
   a chemical word in English, Hindi or Gujarati.
 - With `OPENAI_API_KEY` set instead of a Groq key, the photo is also sent to GPT-4o as an image.
 
-## Quick start
+## Run it locally
 
 ```bash
 cd backend
@@ -70,13 +68,26 @@ npm run dev                          # http://localhost:5173 (set VITE_API_URL f
 check's guesses, the forecast used and how many lines the guard removed. Uploads are not
 stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 
-## Reproduce the numbers
+## Test it
 
-| What | Command | Output |
-|---|---|---|
-| Tests (no keys, no network) | `cd backend && pytest` | 38 tests |
-| Safety eval (needs a Groq key) | `python backend/scripts/safety_eval.py` | [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
-| Photo check training and test | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb) on a Colab T4, about 10 minutes | `eval/results/classifier_results.json`, `backend/models/crop_head.json` |
+```bash
+cd backend && pytest                 # 38 tests, model provider stubbed, no keys needed
+cd frontend && npm run check         # svelte-check
+```
+
+CI runs both on every push and pull request.
+
+## Limitations
+
+- **Prototype.** Answers are not yet grounded in official advisories, and their agronomic
+  correctness has not been measured: that needs real farmers' questions with reference
+  answers ([eval/COLLECTING.md](eval/COLLECTING.md)).
+- **Photo check coverage.** 14 crops from PlantVillage; not cotton, groundnut, cumin or
+  castor, which matter most in Gujarat. See [docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md).
+- **The guard is lexical.** It removes sentences pairing a quantity with a chemical word in
+  English, Hindi or Gujarati; phrasing it does not recognise is not caught by it.
+- **Hosted models.** Speech recognition and drafting run on Groq's free tier, so they are
+  subject to its availability and rate limits.
 
 ## Project layout
 
@@ -95,18 +106,19 @@ eval/                  safety prompts and results, farmer-question kit, rubric
 docs/                  EVAL.md, REBUILD_PLAN.md
 ```
 
-## Team
+## Authors
 
 - [Pavan Patel (@CODER7657)](https://github.com/CODER7657): lead developer and maintainer
 - [Hem Patel (@Hem60)](https://github.com/Hem60): backend
 - [Ayush (@Ayush3422)](https://github.com/Ayush3422): frontend
 
-## Data and model credits
+## Licence and data
 
-PlantVillage (Hughes and Salathé, 2015) and PlantDoc (Singh et al., 2020) for training
-and testing the photo check; DINOv2 (Meta, Apache-2.0) via the `onnx-community` ONNX
-export; Whisper and the chat models are served by Groq; forecasts from Open-Meteo.
+Code: MIT, see [LICENSE](LICENSE).
 
-## License
-
-MIT, see [LICENSE](LICENSE).
+- **PlantDoc** (Singh et al., 2020): CC BY 4.0. Used to train and test the photo check.
+- **PlantVillage** (Hughes and Salathé, 2015): the source repository carries no licence
+  file. Used for training only; no images are redistributed here.
+- **DINOv2** (Meta): Apache-2.0, via the `onnx-community` ONNX export. The backbone is
+  fetched at setup, not committed; the trained head (`backend/models/crop_head.json`) is.
+- Whisper and the chat models are served by Groq; forecasts from Open-Meteo.
