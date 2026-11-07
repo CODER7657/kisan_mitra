@@ -30,8 +30,8 @@ jobs:
         run: ruff format --check .
       - name: security lint, high severity (bandit)
         run: bandit -r kisan main.py -lll
-      # Known vulnerabilities fail the build, except those listed (with the reason) in
-      # pip-audit-ignore.txt because the fix is a major upgrade still to be done.
+      # Known vulnerabilities fail the build, except any listed with a reason in
+      # pip-audit-ignore.txt (empty since the pillow 13 / starlette 1.x upgrade).
       - name: dependency vulnerabilities (pip-audit)
         run: |
           mapfile -t ignores < <(sed -n 's/^\([A-Z][A-Za-z0-9-]*\).*/--ignore-vuln\n\1/p' pip-audit-ignore.txt)

@@ -1,6 +1,6 @@
 -r requirements.txt
-# 8.4 is the floor schemathesis 4 needs (was 8.3.4).
-pytest==8.4.2
+# 9.0.3 fixes PYSEC-2026-1845; schemathesis 4 allows <10.
+pytest==9.0.3
 # Contract fuzzing (tests/test_contract_fuzz.py); hypothesis pinned so runs reproduce.
 schemathesis==4.33.1
 hypothesis==6.170.15
