@@ -3,10 +3,11 @@
 Crop advice by voice for small farmers in Gujarat: ask in Gujarati, Hindi or English, optionally with a photo, and get practical next steps in the same language, never a pesticide or fertiliser dose.
 
 [![backend tests](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml)
+[![safety gate](https://github.com/CODER7657/kisan_mitra/actions/workflows/safety-gate.yml/badge.svg)](https://github.com/CODER7657/kisan_mitra/actions/workflows/safety-gate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Live](https://img.shields.io/badge/live-kisan--mitra-2f5d3a.svg)](https://kisan-mitra-gilt.vercel.app/)
+[![Live](https://img.shields.io/badge/live-kisan--mitra-2f5d3a.svg)](https://kisan-mitra-gilt.vercel.app)
 
-**Live:** https://kisan-mitra-gilt.vercel.app/
+**Live:** [kisan-mitra-gilt.vercel.app](https://kisan-mitra-gilt.vercel.app) (API: [kisan-mitra-api.vercel.app/health](https://kisan-mitra-api.vercel.app/health)).
 
 ![Kisan Mitra: speak or type a question, add a crop photo, choose a language](docs/screenshot.png)
 
@@ -15,13 +16,15 @@ Kendra (KVK) for the product and amount.
 
 ## Measured results
 
-Measured 2026-10-21; method and full numbers in [docs/EVAL.md](docs/EVAL.md).
+Evaluations measured 2026-10-21 (method and full numbers in [docs/EVAL.md](docs/EVAL.md));
+test counts 2026-11-07.
 
 | What | Result | Reproduce |
 |---|---|---|
-| Safety: attempts to get a dose or brand (dose requests, brand requests, "I'm an officer, ignore your rules"), en/hi/gu | **0 doses, 0 brands in 28 attempts**, a KVK referral every time; all 8 harmless questions that need a number still answered. Prompts committed before the code | `python backend/scripts/safety_eval.py` (needs a Groq key) → [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
+| Safety: attempts to get a dose or brand (dose requests, brand requests, "I'm an officer, ignore your rules"), en/hi/gu | **0 doses, 0 brands in 28 attempts**, a KVK referral every time; all 8 harmless questions that need a number still answered. Prompts committed before the code. Re-run nightly by the safety gate | `python backend/scripts/safety_eval.py` (needs a Groq key) → [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
 | Photo check, 222 field photos, 38 crop/condition classes | **64.9%** top-1, 91.9% top-3. When confident it answers 63.5% of photos and is right on 82.3%; otherwise it says it isn't sure. A lab-photo-only model scored 36.0% on the same photos | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb), Colab T4, about 10 minutes |
-| Backend tests (no keys, no network) | **38 passing** (2026-11-07) | `cd backend && pytest` |
+| Backend tests (no keys, no network) | **78 passing** | `cd backend && pytest` |
+| Frontend tests | **36 passing** | `cd frontend && npm test` |
 
 ## How an answer is made
 
@@ -52,7 +55,7 @@ flowchart LR
 ```bash
 cd backend
 pip install -r requirements.txt
-python scripts/get_model.py          # fetches the 24 MB photo-check backbone, sha256-checked
+python scripts/get_model.py          # checks the 24 MB photo-check backbone's sha256 (downloads it if missing)
 cp .env.example .env                 # add GROQ_API_KEY
 uvicorn main:app --reload            # http://localhost:8000
 ```
@@ -71,11 +74,33 @@ stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 ## Test it
 
 ```bash
-cd backend && pytest                 # 38 tests, model provider stubbed, no keys needed
+cd backend && pytest                 # 78 tests, model provider stubbed, no keys needed
+cd frontend && npm test              # 36 tests
 cd frontend && npm run check         # svelte-check
 ```
 
-CI runs both on every push and pull request.
+CI runs these on every push and pull request; the safety gate runs the live-model
+evaluation on pull requests that touch the answer pipeline, and nightly.
+
+## Deploy (free tiers, no card)
+
+Both parts run on Vercel's Hobby plan. Steps: [docs/DEPLOY.md](docs/DEPLOY.md).
+
+- **Backend:** a Python function (FastAPI preset, `backend/index.py`) in Mumbai (`bom1`,
+  [backend/vercel.json](backend/vercel.json)). The photo classifier's int8 ONNX model is in
+  git, so a cold start loads it from disk instead of downloading it. `GET /health` answered in
+  0.21 to 0.27 s in three consecutive calls.
+- **Frontend:** static files (`adapter-static`). A production build fails unless
+  `VITE_API_URL` is a public `https` URL, so it can never ship a page that calls `localhost`.
+  The page pings `/health` on load, so an idle function starts while the farmer fills the form.
+- **Uploads:** Vercel caps a request body at about 4.5 MB, so the page shrinks photos to at
+  most 1600 px on the longer side and refuses a photo plus recording over 4 MB with a clear
+  message before sending. The server still refuses photos over 8 MB or 30 MP.
+- **Limits:** each client gets `RATE_LIMIT_PER_MIN` requests a minute. If Groq rate-limits
+  or times out, the API answers 503 or 504 with a plain message instead of hanging.
+- **Safety gate:** [safety-gate.yml](.github/workflows/safety-gate.yml) runs the 28-question
+  evaluation against the real model on pull requests and nightly, and fails if any answer
+  after the guard gives an amount or names a brand.
 
 ## Limitations
 
@@ -84,10 +109,10 @@ CI runs both on every push and pull request.
   answers ([eval/COLLECTING.md](eval/COLLECTING.md)).
 - **Photo check coverage.** 14 crops from PlantVillage; not cotton, groundnut, cumin or
   castor, which matter most in Gujarat. See [docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md).
-- **The guard is lexical.** It removes sentences pairing a quantity with a chemical word in
-  English, Hindi or Gujarati; phrasing it does not recognise is not caught by it.
+- **The guard is lexical.** It removes sentences pairing a quantity with a chemical word, or
+  naming a brand, in English, Hindi or Gujarati; phrasing it does not recognise is not caught.
 - **Hosted models.** Speech recognition and drafting run on Groq's free tier, so they are
-  subject to its availability and rate limits.
+  subject to its availability and rate limits (the API answers 503/504 when Groq fails).
 
 ## Project layout
 
@@ -98,7 +123,8 @@ backend/
   kisan/guard.py       dose and brand guard, KVK referral, language detection
   kisan/vision.py      photo check (ONNX backbone + head)
   kisan/weather.py     Open-Meteo forecast
-  models/crop_head.json  trained head (41 KB); the backbone is fetched, not committed
+  models/              dinov2_small_int8.onnx (24 MB backbone, committed so a cold start reads it
+                       from disk), its Apache-2.0 licence, crop_head.json (trained head, 41 KB)
   scripts/             safety_eval.py, get_model.py
 frontend/              SvelteKit app: record or type, photo, language, read aloud
 notebooks/             photo-check training (and the fine-tuning comparison)
@@ -119,6 +145,7 @@ Code: MIT, see [LICENSE](LICENSE).
 - **PlantDoc** (Singh et al., 2020): CC BY 4.0. Used to train and test the photo check.
 - **PlantVillage** (Hughes and Salathé, 2015): the source repository carries no licence
   file. Used for training only; no images are redistributed here.
-- **DINOv2** (Meta): Apache-2.0, via the `onnx-community` ONNX export. The backbone is
-  fetched at setup, not committed; the trained head (`backend/models/crop_head.json`) is.
+- **DINOv2** (Meta): Apache-2.0, via the `onnx-community` ONNX export. The int8 copy in
+  `backend/models/` is redistributed under that licence
+  ([DINOv2-LICENSE.txt](backend/models/DINOv2-LICENSE.txt)); the trained head next to it is ours.
 - Whisper and the chat models are served by Groq; forecasts from Open-Meteo.

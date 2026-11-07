@@ -3,10 +3,14 @@
 import logging
 import mimetypes
 import os
+import time
 import uuid
+from collections import defaultdict, deque
+from urllib.parse import urlsplit
 
+import openai
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from kisan import answer, config, vision, weather
@@ -16,14 +20,73 @@ log = logging.getLogger("kisan_mitra")
 
 app = FastAPI(title="Kisan Mitra AI Backend")
 
-# Origins allowed to call the API: local dev servers plus anything in ALLOWED_ORIGINS (comma separated).
-origins = ["http://localhost:5173", "http://localhost:3000"] + [
-    o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()
-]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST"], allow_headers=["*"])
+DEV_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
+
+
+def allowed_origins(value: str | None) -> list[str]:
+    """Local dev servers plus each origin in ALLOWED_ORIGINS (comma separated).
+
+    A browser sends a bare origin (scheme://host[:port]), so a pasted page URL is cut down
+    to its origin, and an entry without a scheme is dropped; both are logged, since a CORS
+    mismatch otherwise fails silently in the visitor's browser.
+    """
+    origins = list(DEV_ORIGINS)
+    for entry in (o.strip() for o in (value or "").split(",")):
+        if not entry:
+            continue
+        if entry == "*":  # any site; fine for a public API that uses no cookies
+            origins.append(entry)
+            continue
+        parts = urlsplit(entry)
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            log.warning("ALLOWED_ORIGINS: ignoring %r, expected e.g. https://example.org", entry)
+            continue
+        origin = f"{parts.scheme}://{parts.netloc}"
+        if origin != entry.rstrip("/"):
+            log.warning("ALLOWED_ORIGINS: using %r for %r (an origin has no path)", origin, entry)
+        origins.append(origin)
+    return list(dict.fromkeys(origins))
+
+
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(os.getenv("ALLOWED_ORIGINS")),
+                   allow_methods=["GET", "POST"], allow_headers=["*"])
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
+
+
+class RateLimiter:
+    """At most `limit` requests per client per `window` seconds, in this process.
+
+    On serverless hosts each instance keeps its own count, so this is a speed bump against
+    a script draining the free LLM quota, not an exact global limit.
+    """
+
+    def __init__(self, limit: int, window: float = 60.0, clock=time.monotonic):
+        self.limit, self.window, self.clock = limit, window, clock
+        self.hits: dict[str, deque] = defaultdict(deque)
+
+    def allow(self, key: str) -> bool:
+        now = self.clock()
+        q = self.hits[key]
+        while q and now - q[0] >= self.window:
+            q.popleft()
+        if len(q) >= self.limit:
+            return False
+        q.append(now)
+        if len(self.hits) > 10_000:  # forget idle clients so memory stays bounded
+            for k in [k for k, v in self.hits.items() if not v]:
+                del self.hits[k]
+        return True
+
+
+limiter = RateLimiter(int(os.getenv("RATE_LIMIT_PER_MIN", "12")))
+
+
+def client_key(request: Request) -> str:
+    """The visitor's IP: the first address in X-Forwarded-For when a proxy (Vercel) sets it."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
 
 
 def store(data: bytes, filename: str, content_type: str) -> str | None:
@@ -46,8 +109,15 @@ def read_root():
             "photo_classifier": vision.available()}
 
 
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health():
+    """For the host's health check and uptime pings: cheap, no model calls, nothing secret."""
+    return {"status": "ok"}
+
+
 @app.post("/analyze/")
 async def analyze_farm_data(
+    request: Request,
     image_file: UploadFile | None = File(None),
     audio_file: UploadFile | None = File(None),
     question: str | None = Form(None),
@@ -56,6 +126,8 @@ async def analyze_farm_data(
     lon: float | None = Form(None),
 ):
     """A spoken or typed question, with an optional crop photo and location, answered and checked."""
+    if not limiter.allow(client_key(request)):
+        raise HTTPException(429, "Too many questions in a minute. Please wait a little and try again.")
     p = config.provider()
     if p is None:
         raise HTTPException(503, "No model provider configured: set GROQ_API_KEY or OPENAI_API_KEY.")
@@ -89,6 +161,12 @@ async def analyze_farm_data(
         audio_url = store(audio, audio_file.filename or "question.wav", "audio/wav") if audio else None
     except HTTPException:
         raise
+    except openai.RateLimitError:
+        log.warning("model provider rate limit")
+        raise HTTPException(503, "The advice service is busy right now. Please try again in a minute.")
+    except (openai.APITimeoutError, openai.APIConnectionError):
+        log.warning("model provider timeout or connection error")
+        raise HTTPException(504, "The advice service took too long to answer. Please try again.")
     except Exception:
         log.exception("analysis failed")
         raise HTTPException(500, "Something went wrong while answering. Please try again.")

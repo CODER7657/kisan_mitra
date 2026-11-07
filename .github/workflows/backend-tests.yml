@@ -40,4 +40,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run check
+      - run: npm test
+      # A production build must refuse to fall back to localhost.
+      - name: build without VITE_API_URL fails
+        run: "! npm run build > build.log 2>&1 && grep -q 'VITE_API_URL is not set' build.log"
       - run: npm run build
+        env:
+          VITE_API_URL: https://kisan-mitra-api.example.org
+      - name: bundle never calls localhost
+        run: "! grep -rq 'localhost:8000' build"
