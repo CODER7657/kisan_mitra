@@ -1,0 +1,54 @@
+/* Kisan Mitra design tokens: restrained Bohemian. The only place colours, type and
+   texture are defined; components read these variables and never hard-code a value.
+
+   Contrast (WCAG 2.1, computed from these hex values):
+     ink on sand 12.42, ink on paper 14.51, ink-soft on sand 6.69, ink-soft on paper 7.82,
+     cactus on paper 5.45, paper on cactus 5.45, rust on paper 7.62, sand on rust 6.52,
+     ink on ochre 7.21.
+   terracotta (3.29 on sand) and ochre (1.72 on sand) fail 4.5:1 for text, so they are
+   only used for decoration, borders and icons (terracotta on paper 3.85 >= 3:1 for
+   graphics), or as a background under ink text (ink on ochre 7.21). */
+:root {
+	/* Palette (roadmap design spec) */
+	--sand: #f1e3c8;
+	--terracotta: #c65d3b;
+	--ochre: #e0a458;
+	--sage: #8a9a5b;
+	--cactus: #3f6e4e;
+	--rust: #8c2f1d;
+	--ink: #2b2118;
+
+	/* Derived from the palette */
+	--paper: #fbf5ea; /* content surfaces, a lighter sand */
+	--ink-soft: #5a4a3a; /* secondary text, ink mixed toward sand */
+	--line: #dcc8a4; /* hairlines on sand and paper */
+	--line-strong: #8a7356; /* form control borders, 3.9:1 on paper */
+	--cactus-deep: #345c41; /* primary button hover */
+	--cactus-soft: #e6ead6; /* sage tint */
+	--ochre-soft: #f7e6c6; /* ochre tint */
+	--rust-soft: #f6e2d9; /* rust tint for errors */
+
+	/* Type */
+	--font-heading: 'Fraunces', 'Noto Sans Gujarati', 'Noto Sans Devanagari', Georgia, serif;
+	--font-body: 'Noto Sans', 'Noto Sans Gujarati', 'Noto Sans Devanagari', system-ui, -apple-system, 'Segoe UI',
+		Roboto, sans-serif;
+	--text-body: clamp(1.125rem, 1.06rem + 0.25vw, 1.25rem); /* 18px to 20px, never below 18px */
+	--text-lead: clamp(1.1875rem, 1.1rem + 0.35vw, 1.375rem);
+	--text-h2: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem);
+	--text-h3: clamp(1.25rem, 1.15rem + 0.4vw, 1.375rem);
+	--text-h1: clamp(2.125rem, 1.5rem + 3vw, 3.25rem);
+	--text-button: clamp(1.125rem, 1.08rem + 0.2vw, 1.25rem);
+
+	/* Shape and space */
+	--radius: 12px;
+	--shadow: 0 1px 0 rgb(43 33 24 / 0.04), 0 8px 24px -16px rgb(43 33 24 / 0.25);
+	--radius-small: 8px;
+	--touch: 48px; /* Kisan rule: every control at least 48px tall */
+	--focus: 3px solid var(--rust);
+
+	/* Texture: paper grain (fractal noise, shown at 4%) and folk dots for the header band */
+	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.13 0 0 0 0 0.09 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+	--grain-opacity: 0.04;
+	--folk-dots: radial-gradient(circle at center, rgb(224 164 88 / 0.22) 1.5px, transparent 2px) 0 0 / 18px 18px,
+		radial-gradient(circle at center, rgb(241 227 200 / 0.12) 1px, transparent 1.5px) 9px 9px / 18px 18px;
+}
