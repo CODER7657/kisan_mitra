@@ -173,9 +173,11 @@ async def analyze_farm_data(
         if image:
             try:
                 photo = vision.classify(image)
-            except Exception:
+            except Exception as exc:
                 log.exception("photo classifier failed")
-                raise HTTPException(400, "The photo could not be read. Please send a JPG or PNG.")
+                raise HTTPException(
+                    400, "The photo could not be read. Please send a JPG or PNG."
+                ) from exc
         forecast = weather.forecast(lat, lon) if lat is not None and lon is not None else None
         result = answer.answer(
             p,
@@ -192,17 +194,19 @@ async def analyze_farm_data(
         )
     except HTTPException:
         raise
-    except openai.RateLimitError:
+    except openai.RateLimitError as exc:
         log.warning("model provider rate limit")
         raise HTTPException(
             503, "The advice service is busy right now. Please try again in a minute."
-        )
-    except (openai.APITimeoutError, openai.APIConnectionError):
+        ) from exc
+    except (openai.APITimeoutError, openai.APIConnectionError) as exc:
         log.warning("model provider timeout or connection error")
-        raise HTTPException(504, "The advice service took too long to answer. Please try again.")
-    except Exception:
+        raise HTTPException(
+            504, "The advice service took too long to answer. Please try again."
+        ) from exc
+    except Exception as exc:
         log.exception("analysis failed")
-        raise HTTPException(500, "Something went wrong while answering. Please try again.")
+        raise HTTPException(500, "Something went wrong while answering. Please try again.") from exc
 
     return {
         "analysis": result["analysis"],

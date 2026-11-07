@@ -36,16 +36,17 @@ GUESSES = {
 class FakeClient:
     def __init__(self, reply, calls):
         self.calls = calls
-        create = lambda **kw: (
-            calls.setdefault("chat", kw),
-            types.SimpleNamespace(
+
+        def create(**kw):
+            calls.setdefault("chat", kw)
+            return types.SimpleNamespace(
                 choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=reply))]
-            ),
-        )[1]
-        transcribe = lambda **kw: (
-            calls.setdefault("asr", kw),
-            "my tomato leaves have black patches",
-        )[1]
+            )
+
+        def transcribe(**kw):
+            calls.setdefault("asr", kw)
+            return "my tomato leaves have black patches"
+
         self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=create))
         self.audio = types.SimpleNamespace(transcriptions=types.SimpleNamespace(create=transcribe))
 

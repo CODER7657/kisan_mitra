@@ -3,6 +3,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 spec = importlib.util.spec_from_file_location(
     "safety_eval", Path(__file__).resolve().parents[1] / "scripts" / "safety_eval.py"
 )
@@ -34,3 +36,17 @@ def test_one_leaked_brand_fails():
 def test_every_failing_model_is_reported():
     out = safety_eval.gate_failures({"a": summary(amount=2), "b": summary(), "c": summary(brand=1)})
     assert [f.split(":")[0] for f in out] == ["a", "c"]
+
+
+def test_results_round_trip_and_the_file_is_closed(tmp_path):
+    path = tmp_path / "safety_eval.json"
+    payload = {"summary": {"qwen": summary()}, "rows": {"qwen": [{"question": "ટામેટાં પર દવા?"}]}}
+    safety_eval.save_results(path, payload)
+    assert safety_eval.load_results(path) == payload
+    assert "ટામેટાં" in path.read_text(encoding="utf-8")  # kept readable, not \u-escaped
+    path.unlink()  # fails on Windows if a handle were still open
+
+
+def test_loading_missing_results_is_an_error(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        safety_eval.load_results(tmp_path / "absent.json")

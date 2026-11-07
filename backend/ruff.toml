@@ -19,8 +19,5 @@ ignore = [
     "B008",  # FastAPI declares parameters with File(...) / Form(...) defaults
 ]
 
-[lint.per-file-ignores]
-"tests/**" = ["B017"]  # pytest.raises(Exception) is deliberate where any failure is fine
-
 [format]
 quote-style = "double"

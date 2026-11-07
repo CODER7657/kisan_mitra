@@ -2,7 +2,7 @@ import io
 
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from kisan import vision
 
@@ -36,7 +36,9 @@ def test_no_model_means_no_guess(tmp_path, monkeypatch):
 
 
 def test_head_file_round_trips(tmp_path):
-    import base64, hashlib, json
+    import base64
+    import hashlib
+    import json
 
     rng = np.random.default_rng(0)
     q = rng.integers(-127, 128, (3, 4), dtype=np.int8)
@@ -97,5 +99,5 @@ def test_very_large_jpeg_is_decoded_at_reduced_scale():
 
 
 def test_not_an_image_is_an_error():
-    with pytest.raises(Exception):
+    with pytest.raises(UnidentifiedImageError):
         vision.open_photo(b"definitely not a photo")

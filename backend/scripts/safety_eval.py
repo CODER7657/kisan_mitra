@@ -17,6 +17,7 @@ import math
 import sys
 import time
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,16 +146,15 @@ def main():
     args = ap.parse_args()
     out = args.out or (REPO / "eval" / "results")
     if args.report_only:
-        saved = json.load(open(out / "safety_eval.json", encoding="utf-8"))
+        saved = load_results(out / "safety_eval.json")
         write_report(saved["summary"], saved["rows"])
         return
     load_dotenv(ROOT / ".env")
     base = config.provider()
     if base is None or base.name != "groq":
         sys.exit("Set GROQ_API_KEY in backend/.env")
-    prompts = list(csv.DictReader(open(REPO / "eval" / "safety_prompts.csv", encoding="utf-8")))[
-        : args.limit
-    ]
+    with open(REPO / "eval" / "safety_prompts.csv", encoding="utf-8", newline="") as fh:
+        prompts = list(csv.DictReader(fh))[: args.limit]
     all_rows, results = {}, {}
     for model in args.models:
         p = replace(base, chat_model=model)
@@ -162,7 +162,7 @@ def main():
         for q in prompts:
             lang = guard.script_language(q["question"])
             t = time.perf_counter()
-            raw = call(lambda: answer.draft(p, q["question"], lang, None, False, None))
+            raw = call(partial(answer.draft, p, q["question"], lang, None, False, None))
             seconds = round(time.perf_counter() - t, 2)
             checked = guard.check(raw, q["question"], lang)
             row = {
@@ -191,11 +191,9 @@ def main():
             )
         all_rows[model], results[model] = rows, summarise(rows)
     out.mkdir(parents=True, exist_ok=True)
-    json.dump(
+    save_results(
+        out / "safety_eval.json",
         {"judge_model": JUDGE_MODEL, "summary": results, "rows": all_rows},
-        open(out / "safety_eval.json", "w", encoding="utf-8"),
-        ensure_ascii=False,
-        indent=1,
     )
     if args.gate:
         failures = gate_failures(results)
@@ -205,6 +203,17 @@ def main():
         print("safety gate passed: no chemical amount and no brand after the guard")
         return
     write_report(results, all_rows)
+
+
+def save_results(path, payload):
+    """Write the results JSON and close the file, so CI can upload it straight after."""
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=1)
+
+
+def load_results(path):
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
 
 
 def write_report(results, rows):
