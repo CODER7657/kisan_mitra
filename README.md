@@ -1,4 +1,4 @@
-# 🌾 Kisan Mitra
+# Kisan Mitra
 
 [![backend tests](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/CODER7657/kisan_mitra/actions/workflows/backend-tests.yml)
 
@@ -7,6 +7,8 @@ or text, in Gujarati, Hindi or English, optionally with a photo of the crop, and
 practical next steps in the same language. It **never gives a pesticide or fertiliser
 dose**: it says what kind of treatment can help and sends the farmer to their Krishi
 Vigyan Kendra (KVK) for the product and amount.
+
+**Live:** [kisan-mitra-gilt.vercel.app](https://kisan-mitra-gilt.vercel.app) (API: [kisan-mitra-api.vercel.app/health](https://kisan-mitra-api.vercel.app/health)).
 
 **Measured so far** ([docs/EVAL.md](docs/EVAL.md)):
 
@@ -70,26 +72,31 @@ npm run dev                          # http://localhost:5173 (set VITE_API_URL f
 check's guesses, the forecast used and how many lines the guard removed. Uploads are not
 stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 
-## Deploy (free tiers)
+## Deploy (free tiers, no card)
 
-The backend runs on a Render free web service from [render.yaml](render.yaml); the
-frontend is static files on Vercel (`adapter-static`). Steps: [docs/DEPLOY.md](docs/DEPLOY.md).
+Both parts run on Vercel's Hobby plan. Steps: [docs/DEPLOY.md](docs/DEPLOY.md).
 
-- `GET /health` returns `{"status": "ok"}` for Render's health check and uptime pings.
-- A production frontend build fails unless `VITE_API_URL` is a public `https` URL, so it can
-  never ship a page that calls `localhost`.
-- Memory, measured on Windows with one uvicorn worker: 76 MB after start, 280 MB peak
-  classifying a 12 MP photo, 313 MB at the largest photo accepted (`MAX_PIXELS`, 30 MP);
-  Render's free tier gives 512 MB. Bigger images are refused with a 400 before decoding,
-  and JPEGs above about 4000x3600 are decoded at reduced scale.
-- Free instances sleep after 15 idle minutes; the first request after that waits for a cold
-  start (about a minute). The page pings `/health` on load to start waking it early.
+- **Backend:** a Python function (FastAPI preset, `backend/index.py`) in Mumbai (`bom1`,
+  [backend/vercel.json](backend/vercel.json)). The photo classifier's int8 ONNX model is in
+  git, so a cold start loads it from disk instead of downloading it. `GET /health` answered in
+  0.21 to 0.27 s in three consecutive calls.
+- **Frontend:** static files (`adapter-static`). A production build fails unless
+  `VITE_API_URL` is a public `https` URL, so it can never ship a page that calls `localhost`.
+  The page pings `/health` on load, so an idle function starts while the farmer fills the form.
+- **Uploads:** Vercel caps a request body at about 4.5 MB, so the page shrinks photos to at
+  most 1600 px on the longer side and refuses a photo plus recording over 4 MB with a clear
+  message before sending. The server still refuses photos over 8 MB or 30 MP.
+- **Limits:** each client gets `RATE_LIMIT_PER_MIN` requests a minute. If Groq rate-limits
+  or times out, the API answers 503 or 504 with a plain message instead of hanging.
+- **Safety gate:** [safety-gate.yml](.github/workflows/safety-gate.yml) runs the 28-question
+  evaluation against the real model on pull requests and nightly, and fails if any answer
+  after the guard gives an amount or names a brand.
 
 ## Reproduce the numbers
 
 | What | Command | Output |
 |---|---|---|
-| Tests (no keys, no network) | `cd backend && pytest` | 55 tests |
+| Tests (no keys, no network) | `cd backend && pytest` | 78 tests |
 | Frontend tests | `cd frontend && npm test` | 22 tests |
 | Safety eval (needs a Groq key) | `python backend/scripts/safety_eval.py` | [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
 | Photo check training and test | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb) on a Colab T4, about 10 minutes | `eval/results/classifier_results.json`, `backend/models/crop_head.json` |
