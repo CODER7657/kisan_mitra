@@ -273,8 +273,8 @@
 								<Icon class="sky-icon" size={28} strokeWidth={1.75} />
 								<span class="visually-hidden">{SKY_LABEL[sky]}</span>
 								<span class="date">{d.date}</span>
-								<span class="mm">{d.rain_mm} mm</span>
-								<span class="muted pct">{d.rain_chance_pct}%</span>
+								<span class="mm">{d.rain_mm == null ? '–' : `${d.rain_mm} mm`}</span>
+								<span class="muted pct">{d.rain_chance_pct == null ? '–' : `${d.rain_chance_pct}%`}</span>
 							</li>
 						{/each}
 					</ul>

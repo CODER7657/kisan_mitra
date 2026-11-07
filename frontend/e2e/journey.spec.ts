@@ -118,3 +118,17 @@ test('no emoji are used as icons', async ({ page }) => {
 	const text = await page.locator('body').innerText();
 	expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
 });
+
+test('a forecast day with no numbers shows a dash and a plain cloud, never "null"', async ({ page }) => {
+	await page.setViewportSize({ width: 375, height: 812 });
+	const gap = answer('2026-11-07', '2026-11-08', '2026-11-09');
+	gap.weather.days[1] = { date: '2026-11-08', rain_mm: null, rain_chance_pct: null } as never;
+	await mockNetwork(page, gap);
+	await openPage(page);
+	await askInGujarati(page);
+	const day = page.locator('.weather li').nth(1);
+	await expect(day).toHaveAttribute('data-sky', 'unknown');
+	await expect(day.locator('.mm')).toHaveText('–');
+	await expect(day.locator('.pct')).toHaveText('–');
+	await expect(page.locator('.weather')).not.toContainText('null');
+});

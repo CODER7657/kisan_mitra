@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
 // End-to-end tests run against `vite preview` of a production build, so build first:
@@ -5,6 +6,11 @@ import { defineConfig, devices } from '@playwright/test';
 // Every request to the backend is mocked in the tests; nothing leaves the machine.
 const PORT = 4173;
 const CI = !!process.env.CI;
+const LOCAL_CHROME = CI
+	? undefined
+	: [process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find(
+			(path): path is string => !!path && existsSync(path)
+		);
 
 export default defineConfig({
 	testDir: 'e2e',
@@ -26,8 +32,9 @@ export default defineConfig({
 			name: 'chromium',
 			use: {
 				...devices['Desktop Chrome'],
-				// CI installs Playwright's Chromium; locally an installed Chrome is enough.
-				...(CI ? {} : { launchOptions: { executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' } })
+				// CI installs Playwright's Chromium. Locally, an installed Chrome is used when one
+				// is found (set CHROME_PATH to point elsewhere); otherwise Playwright's own.
+				...(LOCAL_CHROME ? { launchOptions: { executablePath: LOCAL_CHROME } } : {})
 			}
 		}
 	],
