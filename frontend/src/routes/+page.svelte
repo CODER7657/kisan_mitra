@@ -4,6 +4,29 @@
 	import { readReply, resolveApiUrl } from '$lib/api';
 	import { formatDuration, loadingMessage } from '$lib/ui';
 	import { MAX_RECORDING_MS, shrinkPhoto, tooLargeMessage } from '$lib/upload';
+	import { SKY_LABEL, skyForDay, type Sky } from '$lib/weather';
+	import Camera from 'lucide-svelte/icons/camera';
+	import Cloud from 'lucide-svelte/icons/cloud';
+	import CloudDrizzle from 'lucide-svelte/icons/cloud-drizzle';
+	import CloudRain from 'lucide-svelte/icons/cloud-rain';
+	import CloudRainWind from 'lucide-svelte/icons/cloud-rain-wind';
+	import Mic from 'lucide-svelte/icons/mic';
+	import Moon from 'lucide-svelte/icons/moon';
+	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
+	import Sprout from 'lucide-svelte/icons/sprout';
+	import Square from 'lucide-svelte/icons/square';
+	import Sun from 'lucide-svelte/icons/sun';
+	import Volume2 from 'lucide-svelte/icons/volume-2';
+
+	// One line icon per sky in the weather strip; 'unknown' gets a plain cloud, never a sun.
+	const SKY_ICON: Record<Sky, typeof Sun> = {
+		'heavy-rain': CloudRainWind,
+		rain: CloudRain,
+		showers: CloudDrizzle,
+		'clear-day': Sun,
+		'clear-night': Moon,
+		unknown: Cloud
+	};
 
 	// Backend URL: set VITE_API_URL when building for production. Null means no backend is
 	// configured, and the page says the service is unavailable instead of calling localhost.
@@ -187,12 +210,13 @@
 <svelte:head>
 	<title>Kisan Mitra · Crop advice by voice</title>
 	<meta name="description" content="Ask about your crop by voice or text in Gujarati, Hindi or English. Never gives chemical doses." />
-	<meta name="theme-color" content="#f7f6f1" />
+	<!-- The header band's colour (--rust in tokens.css); meta tags cannot read CSS variables. -->
+	<meta name="theme-color" content="#8c2f1d" />
 </svelte:head>
 
 <div class="top">
 	<div class="bar">
-		<span class="mark" aria-hidden="true"></span>
+		<Sprout class="mark" size={28} strokeWidth={1.75} />
 		<span class="brand">Kisan Mitra</span>
 		<span class="tag">Crop advice by voice</span>
 	</div>
@@ -238,11 +262,20 @@
 				{@html analysisHtml}
 			</div>
 			{#if result.weather}
+				{@const today = new Date()}
 				<div class="weather">
 					<span class="label">Rain forecast <span class="muted">({result.weather.source})</span></span>
-					<ul>
+					<ul class="strip">
 						{#each result.weather.days as d}
-							<li><span>{d.date}</span><span>{d.rain_mm} mm</span><span class="muted">{d.rain_chance_pct}%</span></li>
+							{@const sky = skyForDay(d, today)}
+							{@const Icon = SKY_ICON[sky]}
+							<li data-sky={sky}>
+								<Icon class="sky-icon" size={28} strokeWidth={1.75} />
+								<span class="visually-hidden">{SKY_LABEL[sky]}</span>
+								<span class="date">{d.date}</span>
+								<span class="mm">{d.rain_mm} mm</span>
+								<span class="muted pct">{d.rain_chance_pct}%</span>
+							</li>
 						{/each}
 					</ul>
 				</div>
@@ -251,8 +284,8 @@
 				<p class="muted small">Safety check removed {result.guard.lines_removed} line(s) that gave a chemical dose.</p>
 			{/if}
 			<div class="actions">
-				<button type="button" class="btn" on:click={readAloud}>Read aloud</button>
-				<button type="button" class="btn secondary" on:click={reset}>Ask another question</button>
+				<button type="button" class="btn" on:click={readAloud}><Volume2 size={22} />Read aloud</button>
+				<button type="button" class="btn secondary" on:click={reset}><RotateCcw size={22} />Ask another question</button>
 			</div>
 		</section>
 	{:else}
@@ -266,12 +299,12 @@
 				<div class="record">
 					{#if isRecording}
 						<button type="button" class="btn rec on" on:click={stopRecording}>
-							<span class="dot" aria-hidden="true"></span>Stop recording
+							<Square class="rec-icon" size={20} />Stop recording
 						</button>
 						<span class="status" aria-live="polite">Recording {formatDuration(now - recordStart)}</span>
 					{:else}
 						<button type="button" class="btn rec" on:click={startRecording}>
-							<span class="dot" aria-hidden="true"></span>{audioBlob ? 'Record again' : 'Speak your question'}
+							<Mic class="rec-icon" size={22} />{audioBlob ? 'Record again' : 'Speak your question'}
 						</button>
 						{#if audioBlob}
 							<span class="status ok">Recorded</span>
@@ -291,7 +324,7 @@
 				<legend><span class="num">2</span>Photo of the crop <span class="muted">(optional)</span></legend>
 				<input type="file" id="image" class="visually-hidden" accept="image/*" capture="environment" bind:files={imageFile} />
 				<div class="photo-row">
-					<label for="image" class="btn secondary">{imageFile?.[0] ? 'Change photo' : 'Take or choose photo'}</label>
+					<label for="image" class="btn secondary"><Camera size={22} />{imageFile?.[0] ? 'Change photo' : 'Take or choose photo'}</label>
 					<span class="status">{imageFile?.[0]?.name || 'No photo'}</span>
 				</div>
 			</fieldset>
@@ -329,93 +362,80 @@
 </footer>
 
 <style>
-	:global(:root) {
-		--bg: #f7f6f1;
-		--panel: #ffffff;
-		--ink: #1d2a22;
-		--muted: #5e6a61;
-		--line: #e3e1d8;
-		--accent: #2f5d3a;
-		--accent-ink: #ffffff;
-		--accent-soft: #eaf1eb;
-		--ochre: #8a6a12;
-		--ochre-soft: #faf4e2;
-		--danger: #9b2c2c;
-		--danger-soft: #fbefee;
-	}
-	:global(*) {
-		box-sizing: border-box;
-	}
-	:global(body) {
-		margin: 0;
-		background: var(--bg);
-		color: var(--ink);
-		font: 17px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Gujarati',
-			'Noto Sans Devanagari', 'Helvetica Neue', Arial, sans-serif;
-		-webkit-text-size-adjust: 100%;
-	}
-	:global(:focus-visible) {
-		outline: 3px solid var(--accent);
-		outline-offset: 2px;
-	}
+	/* Restrained Bohemian. Every colour, font and size comes from $lib/tokens.css. */
 
+	/* Header band: rust with a low-contrast folk dot pattern, the only patterned area. */
 	.top {
-		background: var(--panel);
-		border-bottom: 1px solid var(--line);
+		background: var(--folk-dots), var(--rust);
+		color: var(--sand);
+		border-bottom: 4px solid var(--terracotta);
 	}
 	.bar {
-		max-width: 680px;
+		max-width: 720px;
 		margin: 0 auto;
 		padding: 0 20px;
-		height: 56px;
+		min-height: 64px;
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: 12px;
 	}
-	.mark {
-		width: 14px;
-		height: 14px;
-		border-radius: 3px;
-		background: var(--accent);
+	.bar :global(.mark) {
+		color: var(--ochre);
+		flex: none;
 	}
 	.brand {
-		font-weight: 700;
+		font-family: var(--font-heading);
+		font-weight: 600;
+		font-size: clamp(1.25rem, 1.15rem + 0.4vw, 1.5rem);
 		letter-spacing: 0.01em;
 	}
 	.tag {
-		color: var(--muted);
-		font-size: 14px;
-		margin-left: 4px;
+		margin-left: auto;
 	}
 
 	.page {
-		max-width: 680px;
+		max-width: 720px;
 		margin: 0 auto;
 		padding: 0 20px 24px;
 	}
 	.intro {
-		padding: 32px 0 20px;
+		padding: clamp(28px, 5vw, 48px) 0 24px;
 	}
 	h1 {
-		font-size: clamp(28px, 6vw, 36px);
-		line-height: 1.15;
-		letter-spacing: -0.02em;
-		margin: 0 0 8px;
+		font-size: var(--text-h1);
+		line-height: 1.1;
+		letter-spacing: -0.01em;
+		margin: 0 0 14px;
+	}
+	/* A short terracotta rule under the title: decoration only, no text sits on it. */
+	h1::after {
+		content: '';
+		display: block;
+		width: 72px;
+		height: 4px;
+		margin-top: 14px;
+		border-radius: 2px;
+		background: var(--terracotta);
 	}
 	.intro p {
 		margin: 0;
-		color: var(--muted);
+		color: var(--ink-soft);
+		font-size: var(--text-lead);
+		max-width: 36em;
 	}
 
+	/* Content surfaces are opaque paper, so the background grain never sits behind their text. */
 	.panel {
-		background: var(--panel);
+		background: var(--paper);
 		border: 1px solid var(--line);
-		border-radius: 10px;
-		padding: 24px;
+		border-top: 4px solid var(--terracotta);
+		border-radius: var(--radius);
+		padding: clamp(20px, 4vw, 32px);
+		box-shadow: var(--shadow);
 	}
 	.form {
 		display: grid;
-		gap: 24px;
+		gap: 28px;
 	}
 
 	.step {
@@ -423,31 +443,41 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 12px;
+		gap: 14px;
 		min-width: 0;
 	}
 	.sep {
 		border: 0;
-		border-top: 1px solid var(--line);
+		border-top: 1px dashed var(--line);
 		margin: 0;
 	}
 	legend {
-		font-weight: 700;
+		font-family: var(--font-heading);
+		font-weight: 600;
+		font-size: var(--text-h3);
 		padding: 0;
-		margin-bottom: 12px;
+		margin-bottom: 14px;
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px;
+	}
+	legend .muted {
+		font-family: var(--font-body);
+		font-size: var(--text-body);
 	}
 	.num {
 		display: inline-grid;
 		place-items: center;
-		width: 26px;
-		height: 26px;
+		width: 34px;
+		height: 34px;
 		border-radius: 50%;
-		background: var(--accent-soft);
-		color: var(--accent);
-		font-size: 14px;
+		background: var(--ochre);
+		color: var(--ink);
+		font-family: var(--font-body);
+		font-size: var(--text-body);
+		font-weight: 600;
+		flex: none;
 	}
 
 	.btn {
@@ -455,35 +485,35 @@
 		align-items: center;
 		justify-content: center;
 		gap: 10px;
-		min-height: 48px;
-		padding: 0 20px;
+		min-height: var(--touch);
+		padding: 10px 22px;
 		font-family: inherit;
-		font-size: 16px;
+		font-size: var(--text-button);
 		font-weight: 600;
-		line-height: 1.2;
-		border-radius: 8px;
-		border: 1px solid var(--accent);
-		background: var(--accent);
-		color: var(--accent-ink);
+		line-height: 1.25;
+		border-radius: var(--radius-small);
+		border: 2px solid var(--cactus);
+		background: var(--cactus);
+		color: var(--paper);
 		cursor: pointer;
 		text-align: center;
-		transition: background-color 0.15s, border-color 0.15s;
 	}
 	.btn:hover {
-		background: #264d30;
+		background: var(--cactus-deep);
+		border-color: var(--cactus-deep);
 	}
 	.btn.secondary {
-		background: var(--panel);
-		color: var(--accent);
-		border-color: #c9d6cc;
+		background: var(--paper);
+		color: var(--cactus);
+		border-color: var(--cactus);
 	}
 	.btn.secondary:hover {
-		background: var(--accent-soft);
+		background: var(--cactus-soft);
 	}
 	.btn.primary {
 		width: 100%;
-		min-height: 56px;
-		font-size: 18px;
+		min-height: 60px;
+		font-size: var(--text-lead);
 	}
 
 	.record,
@@ -494,88 +524,82 @@
 		gap: 12px 16px;
 	}
 	.btn.rec {
-		background: var(--panel);
+		background: var(--paper);
 		color: var(--ink);
-		border-color: #cdd3cd;
+		border-color: var(--line-strong);
 	}
 	.btn.rec:hover {
-		background: #f3f4f1;
+		background: var(--ochre-soft);
 	}
-	.btn.rec .dot {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: var(--danger);
+	.btn.rec :global(.rec-icon) {
+		color: var(--rust);
+		flex: none;
 	}
 	.btn.rec.on {
-		border-color: var(--danger);
-		color: var(--danger);
-		background: var(--danger-soft);
+		border-color: var(--rust);
+		color: var(--rust);
+		background: var(--rust-soft);
 	}
-	.btn.rec.on .dot {
-		border-radius: 2px;
-		animation: pulse 1.2s ease-in-out infinite;
-	}
-	@keyframes pulse {
-		50% {
-			opacity: 0.35;
-		}
+	.btn.rec.on :global(.rec-icon) {
+		fill: currentColor;
 	}
 	.status {
-		color: var(--muted);
-		font-size: 15px;
+		color: var(--ink-soft);
 		font-variant-numeric: tabular-nums;
 		overflow-wrap: anywhere;
 	}
 	.status.ok {
-		color: var(--accent);
+		color: var(--cactus);
 		font-weight: 600;
 	}
 	.link {
 		background: none;
 		border: 0;
-		padding: 8px 4px;
-		min-height: 44px;
-		color: var(--muted);
+		padding: 8px 6px;
+		min-height: var(--touch);
+		color: var(--ink-soft);
 		text-decoration: underline;
+		text-underline-offset: 3px;
 		font: inherit;
-		font-size: 15px;
 		cursor: pointer;
 	}
 
 	.field {
 		display: grid;
-		gap: 6px;
+		gap: 8px;
 	}
 	.field > span {
-		font-size: 15px;
-		color: var(--muted);
+		color: var(--ink-soft);
 	}
 	textarea,
 	select {
 		width: 100%;
 		font: inherit;
 		color: var(--ink);
-		background: var(--panel);
-		border: 1px solid #cdd3cd;
-		border-radius: 8px;
+		background: var(--paper);
+		border: 2px solid var(--line-strong);
+		border-radius: var(--radius-small);
 		padding: 12px 14px;
-		min-height: 48px;
+		min-height: var(--touch);
 	}
 	textarea {
 		resize: vertical;
+	}
+	textarea::placeholder {
+		color: var(--ink-soft);
+		opacity: 1;
 	}
 	.check {
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		min-height: 48px;
+		min-height: var(--touch);
 		cursor: pointer;
 	}
 	.check input {
-		width: 22px;
-		height: 22px;
-		accent-color: var(--accent);
+		width: 24px;
+		height: 24px;
+		accent-color: var(--cactus);
 		flex: none;
 	}
 	.visually-hidden {
@@ -587,35 +611,36 @@
 		white-space: nowrap;
 	}
 	.visually-hidden:focus-visible + .photo-row .btn {
-		outline: 3px solid var(--accent);
-		outline-offset: 2px;
+		outline: var(--focus);
+		outline-offset: 3px;
 	}
 
 	.notice {
 		margin: 0;
 		padding: 14px 16px;
-		border-radius: 8px;
+		border-radius: var(--radius-small);
 		border: 1px solid var(--line);
 	}
 	.notice.error {
-		color: var(--danger);
-		background: var(--danger-soft);
-		border-color: #ebc9c9;
+		color: var(--rust);
+		background: var(--rust-soft);
+		border-color: var(--rust);
+		border-left-width: 6px;
 	}
 
 	.loading {
 		text-align: center;
 		display: grid;
-		gap: 10px;
+		gap: 12px;
 		justify-items: center;
 		padding: 40px 24px;
 	}
 	.progress {
 		width: 100%;
 		max-width: 320px;
-		height: 4px;
-		border-radius: 2px;
-		background: var(--accent-soft);
+		height: 6px;
+		border-radius: 3px;
+		background: var(--ochre-soft);
 		overflow: hidden;
 		margin-bottom: 8px;
 	}
@@ -623,17 +648,8 @@
 		display: block;
 		width: 35%;
 		height: 100%;
-		background: var(--accent);
-		border-radius: 2px;
-		animation: slide 1.4s ease-in-out infinite;
-	}
-	@keyframes slide {
-		from {
-			transform: translateX(-100%);
-		}
-		to {
-			transform: translateX(290%);
-		}
+		background: var(--terracotta);
+		border-radius: 3px;
 	}
 	.loading-text {
 		margin: 0;
@@ -642,37 +658,29 @@
 	}
 
 	.section-title {
-		font-size: 14px;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--muted);
+		font-size: var(--text-h2);
+		line-height: 1.2;
 		margin: 0 0 16px;
 	}
 	.label {
 		display: block;
-		font-size: 13px;
 		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--muted);
+		color: var(--ink-soft);
 		margin-bottom: 4px;
 	}
 	.said {
 		margin: 0 0 16px;
 		padding-bottom: 16px;
-		border-bottom: 1px solid var(--line);
+		border-bottom: 1px dashed var(--line);
 	}
 	.photo-check {
-		padding: 12px 14px;
-		border-radius: 8px;
-		background: var(--accent-soft);
+		padding: 12px 16px;
+		border-radius: var(--radius-small);
+		background: var(--cactus-soft);
 		margin-bottom: 16px;
 	}
 	.photo-check.unsure {
 		background: var(--ochre-soft);
-	}
-	.photo-check.unsure .label {
-		color: var(--ochre);
 	}
 	.markdown-content {
 		overflow-wrap: anywhere;
@@ -680,15 +688,19 @@
 	.markdown-content :global(h1),
 	.markdown-content :global(h2),
 	.markdown-content :global(h3) {
-		font-size: 18px;
+		font-size: var(--text-h3);
+		line-height: 1.3;
 		margin: 20px 0 8px;
 	}
 	.markdown-content :global(ul),
 	.markdown-content :global(ol) {
-		padding-left: 22px;
+		padding-left: 24px;
 	}
 	.markdown-content :global(li) {
-		margin: 4px 0;
+		margin: 6px 0;
+	}
+	.markdown-content :global(li::marker) {
+		color: var(--terracotta);
 	}
 	.markdown-content :global(table) {
 		border-collapse: collapse;
@@ -700,56 +712,107 @@
 		border: 1px solid var(--line);
 		padding: 6px 10px;
 	}
+
+	/* Weather strip: one entry per day, each led by a sun, moon or rain line icon. */
 	.weather {
-		margin: 20px 0 8px;
-		padding-top: 16px;
-		border-top: 1px solid var(--line);
+		margin: 24px 0 8px;
+		padding-top: 18px;
+		border-top: 1px dashed var(--line);
 	}
-	.weather ul {
+	.strip {
 		list-style: none;
-		margin: 0;
+		margin: 8px 0 0;
 		padding: 0;
 		display: grid;
-		gap: 4px;
+		gap: 8px;
 	}
-	.weather li {
+	.strip li {
 		display: grid;
-		grid-template-columns: 1fr auto 56px;
-		gap: 12px;
+		grid-template-columns: 28px 1fr auto auto;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 12px;
+		white-space: nowrap;
+		border-radius: var(--radius-small);
+		background: var(--sand);
 		font-variant-numeric: tabular-nums;
 	}
-	.weather li span:not(:first-child) {
+	.strip .mm,
+	.strip .pct {
 		text-align: right;
 	}
+	.strip :global(.sky-icon) {
+		color: var(--ink-soft);
+	}
+	.strip li[data-sky='heavy-rain'] :global(.sky-icon),
+	.strip li[data-sky='rain'] :global(.sky-icon),
+	.strip li[data-sky='showers'] :global(.sky-icon) {
+		color: var(--cactus);
+	}
+	.strip li[data-sky='clear-day'] :global(.sky-icon) {
+		color: var(--rust);
+	}
+	.strip li[data-sky='clear-night'] :global(.sky-icon) {
+		color: var(--ink);
+	}
+	@media (min-width: 640px) {
+		.strip {
+			grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+		}
+		.strip li {
+			grid-template-columns: 1fr auto;
+			grid-template-areas: 'icon pct' 'date date' 'mm mm';
+			gap: 2px 8px;
+			padding: 14px 16px;
+		}
+		.strip :global(.sky-icon) {
+			grid-area: icon;
+		}
+		.strip .date {
+			grid-area: date;
+			margin-top: 6px;
+		}
+		.strip .mm {
+			grid-area: mm;
+			text-align: left;
+			font-weight: 600;
+		}
+		.strip .pct {
+			grid-area: pct;
+		}
+	}
+
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 12px;
-		margin-top: 24px;
+		margin-top: 28px;
 	}
 
 	.muted {
-		color: var(--muted);
+		color: var(--ink-soft);
 		font-weight: 400;
 	}
 	.small {
-		font-size: 14px;
+		line-height: 1.5;
 		margin: 0;
 	}
 	.foot {
-		max-width: 680px;
+		max-width: 720px;
 		margin: 0 auto;
 		padding: 8px 20px 40px;
-		color: var(--muted);
-		font-size: 14px;
+		color: var(--ink-soft);
 	}
 
 	@media (max-width: 520px) {
 		.tag {
 			display: none;
 		}
-		.panel {
-			padding: 20px 16px;
+		.bar,
+		.page,
+		.foot {
+			padding-left: 16px;
+			padding-right: 16px;
 		}
 		.actions .btn,
 		.record .btn.rec,
@@ -757,10 +820,34 @@
 			flex: 1 1 100%;
 		}
 	}
-	@media (prefers-reduced-motion: reduce) {
-		.progress span,
-		.btn.rec.on .dot {
-			animation: none;
+
+	/* Motion only for people who have not asked for less. */
+	@media (prefers-reduced-motion: no-preference) {
+		.btn,
+		textarea,
+		select {
+			transition:
+				background-color 0.15s,
+				border-color 0.15s;
+		}
+		.progress span {
+			animation: slide 1.4s ease-in-out infinite;
+		}
+		.btn.rec.on :global(.rec-icon) {
+			animation: pulse 1.2s ease-in-out infinite;
+		}
+	}
+	@keyframes slide {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(290%);
+		}
+	}
+	@keyframes pulse {
+		50% {
+			opacity: 0.35;
 		}
 	}
 </style>
