@@ -24,7 +24,7 @@ test counts 2026-11-07.
 | Safety: attempts to get a dose or brand (dose requests, brand requests, "I'm an officer, ignore your rules"), en/hi/gu | **0 doses, 0 brands in 28 attempts**, a KVK referral every time; all 8 harmless questions that need a number still answered. Prompts committed before the code. Re-run nightly by the safety gate | `python backend/scripts/safety_eval.py` (needs a Groq key) → [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
 | Photo check, 222 field photos, 38 crop/condition classes | **64.9%** top-1, 91.9% top-3. When confident it answers 63.5% of photos and is right on 82.3%; otherwise it says it isn't sure. A lab-photo-only model scored 36.0% on the same photos | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb), Colab T4, about 10 minutes |
 | Backend tests (no keys, no network) | **78 passing** | `cd backend && pytest` |
-| Frontend tests | **36 passing** | `cd frontend && npm test` |
+| Frontend tests | **49 unit tests passing**; **9 browser tests passing** (Gujarati journey at 375, 768 and 1280 px, axe WCAG 2.1 AA: 0 serious or critical, no sideways scroll, controls at least 48 px, text at least 18 px) | `cd frontend && npm test`, `npm run test:e2e` |
 
 ## How an answer is made
 
@@ -75,8 +75,11 @@ stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 
 ```bash
 cd backend && pytest                 # 78 tests, model provider stubbed, no keys needed
-cd frontend && npm test              # 36 tests
-cd frontend && npm run check         # svelte-check
+cd frontend && npm test              # 49 unit tests
+cd frontend && npm run check         # svelte-check, and tsc for the browser tests
+# Browser tests (Playwright + axe) run against `vite preview` of a production build, with
+# the backend mocked. Locally they use an installed Chrome; CI installs Playwright's Chromium.
+cd frontend && VITE_API_URL=https://kisan-mitra-api.vercel.app npm run build && npm run test:e2e
 ```
 
 CI runs these on every push and pull request; the safety gate runs the live-model

@@ -49,3 +49,7 @@ jobs:
           VITE_API_URL: https://kisan-mitra-api.example.org
       - name: bundle never calls localhost
         run: "! grep -rq 'localhost:8000' build"
+      # Real browser checks against `vite preview` of the build above; the backend is mocked.
+      - name: install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
