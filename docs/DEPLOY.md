@@ -1,55 +1,51 @@
 # Deploy checklist
 
-Backend on Render (free web service), frontend on Vercel (static). Do them in this order:
-the frontend build needs the backend's URL, and the backend needs the frontend's origin.
+Backend and frontend are two Vercel projects on the Hobby plan (free, no card). Do them in
+this order, because the frontend needs the backend's URL at build time.
 
-## 1. Render: backend
+## 1. Backend: `kisan-mitra-api`
 
-1. Render dashboard > **New > Blueprint**, pick `CODER7657/kisan_mitra`, branch `main`.
-   It reads [render.yaml](../render.yaml): service `kisan-mitra-api`, free plan, Singapore.
-2. When asked for the secret values:
+1. Vercel > **Add New > Project**, import `CODER7657/kisan_mitra`, root directory `backend`.
+   Framework preset **FastAPI**; the entry point is [backend/index.py](../backend/index.py)
+   and [backend/vercel.json](../backend/vercel.json) pins the region to Mumbai (`bom1`).
+2. Environment variables (Production):
 
-   | Variable | Value |
+   | Name | Value |
    |---|---|
-   | `GROQ_API_KEY` | your Groq key (console.groq.com > API Keys). Never commit it. |
-   | `ALLOWED_ORIGINS` | `https://kisan-mitra-gilt.vercel.app` (exact origin: https, no path; trailing slash is trimmed). Add more, comma separated, if you use a custom domain. |
+   | `GROQ_API_KEY` | your Groq key (mark it Sensitive) |
+   | `ALLOWED_ORIGINS` | the frontend's origin, e.g. `https://kisan-mitra-gilt.vercel.app` |
+   | `RATE_LIMIT_PER_MIN` | optional, requests per client per minute |
+   | `STORE_UPLOADS`, `BLOB_READ_WRITE_TOKEN` | optional, only to keep uploads in Vercel Blob |
 
-   Optional, only if you change defaults: `GROQ_CHAT_MODEL`, `GROQ_ASR_MODEL`,
-   `OPENAI_API_KEY` with `LLM_PROVIDER=openai` (sends photos to GPT-4o).
-   Leave `STORE_UPLOADS` unset so farmers' photos and voice are not kept.
-3. Wait for the deploy, then check:
+3. Deploy, then check:
 
    ```bash
-   curl https://kisan-mitra-api.onrender.com/health
+   curl https://kisan-mitra-api.vercel.app/health
    ```
 
-   Expect `{"status":"ok"}`. Then open `https://kisan-mitra-api.onrender.com/` and confirm
-   `"provider": "groq"` and `"photo_classifier": true`. Use the URL Render shows if the
-   name differs.
+   Expect `{"status":"ok"}`. Then open `https://kisan-mitra-api.vercel.app/` and confirm
+   `"provider": "groq"` and `"photo_classifier": true`.
 
-## 2. Vercel: frontend
+## 2. Frontend: `kisan-mitra`
 
-1. Project settings > General: **Root Directory** `frontend`, framework SvelteKit.
-2. Settings > Environment Variables, for **Production** (and Preview if you want previews to work):
-
-   | Variable | Value |
-   |---|---|
-   | `VITE_API_URL` | `https://kisan-mitra-api.onrender.com` (the Render URL, https, no trailing path) |
-
-3. Redeploy (Deployments > ... > Redeploy). `VITE_` values are baked in at build time, so a
-   redeploy is needed after any change. A build without it, or pointing at localhost, fails
-   on purpose with `VITE_API_URL is not set`.
+1. Import the same repository again, root directory `frontend` (`adapter-static`).
+2. Environment variable `VITE_API_URL` = `https://kisan-mitra-api.vercel.app` (https, no
+   trailing path). It is read at build time, so redeploy after any change. A build without
+   it, or pointing at localhost, fails on purpose with `VITE_API_URL is not set`.
+   Do not mark it Sensitive: a build that pulls it would get a placeholder instead.
 
 ## 3. Check it as a visitor
 
-- Open the site on a phone, type a question, send it. The first answer after the backend
-  has slept can take about a minute (Render free cold start); later ones are quick.
-- In the browser's network tab, `/analyze/` should go to the Render URL, not localhost.
+- Open the site on a phone, type a question, send it. In the browser's network tab,
+  `/analyze/` should go to the API URL, not localhost.
+- Try a photo from the phone camera: the page shrinks it before upload, so it stays under
+  Vercel's 4.5 MB request limit.
 - Preview deployments have their own origins, which `ALLOWED_ORIGINS` does not list, so
   their requests are refused by CORS. Add a preview origin there only if you need it.
 
 ## Known limits of the free setup
 
-- No rate limit on `/analyze/`: anyone with the URL can spend your Groq quota. Groq's own
-  free-tier limits cap the damage; add a per-IP limit before sharing widely.
-- One worker, 512 MB: measured peaks are in the README's Deploy section.
+- Groq's free tier is shared by the site and the nightly safety gate. When it is exhausted
+  the API answers 503 with a plain message; the gate retries with longer timeouts.
+- A function that has been idle starts on the next request. The page pings `/health` on
+  load so that start overlaps with the farmer filling the form.
