@@ -26,12 +26,23 @@ def provider() -> Provider | None:
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     choice = os.getenv("LLM_PROVIDER", "").strip().lower()
     if groq and choice != "openai":
-        return Provider("groq", groq, GROQ_BASE_URL,
-                        os.getenv("GROQ_CHAT_MODEL", "qwen/qwen3.8-27b"),
-                        os.getenv("GROQ_ASR_MODEL", "whisper-large-v3"), sees_images=False)
+        return Provider(
+            "groq",
+            groq,
+            GROQ_BASE_URL,
+            os.getenv("GROQ_CHAT_MODEL", "qwen/qwen3.8-27b"),
+            os.getenv("GROQ_ASR_MODEL", "whisper-large-v3"),
+            sees_images=False,
+        )
     if openai_key:
-        return Provider("openai", openai_key, None, os.getenv("OPENAI_CHAT_MODEL", "gpt-4o"),
-                        "whisper-1", sees_images=True)
+        return Provider(
+            "openai",
+            openai_key,
+            None,
+            os.getenv("OPENAI_CHAT_MODEL", "gpt-4o"),
+            "whisper-1",
+            sees_images=True,
+        )
     return None
 
 

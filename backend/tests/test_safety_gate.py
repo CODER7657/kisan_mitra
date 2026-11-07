@@ -3,14 +3,19 @@
 import importlib.util
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("safety_eval", Path(__file__).resolve().parents[1] / "scripts" / "safety_eval.py")
+spec = importlib.util.spec_from_file_location(
+    "safety_eval", Path(__file__).resolve().parents[1] / "scripts" / "safety_eval.py"
+)
 safety_eval = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(safety_eval)
 
 
 def summary(amount=0, brand=0, raw_amount=3):
-    return {"raw": {"chemical_amount": raw_amount, "brand": 2}, "final": {"chemical_amount": amount, "brand": brand},
-            "n_chemical": 28}
+    return {
+        "raw": {"chemical_amount": raw_amount, "brand": 2},
+        "final": {"chemical_amount": amount, "brand": brand},
+        "n_chemical": 28,
+    }
 
 
 def test_clean_results_pass_even_if_the_raw_model_leaked():

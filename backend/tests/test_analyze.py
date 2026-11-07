@@ -1,6 +1,6 @@
 """The /analyze/ endpoint, with the model provider stubbed: no key, network or upload needed.
 
-    cd backend && pytest
+cd backend && pytest
 """
 
 import base64
@@ -18,16 +18,34 @@ REAL_CLASSIFY = vision.classify
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
-GUESSES = {"guesses": [{"label": "Tomato___Late_blight", "crop": "Tomato", "condition": "Late blight",
-                        "probability": 0.81}], "confident": True, "threshold": 0.5, "crops_covered": ["Tomato"]}
+GUESSES = {
+    "guesses": [
+        {
+            "label": "Tomato___Late_blight",
+            "crop": "Tomato",
+            "condition": "Late blight",
+            "probability": 0.81,
+        }
+    ],
+    "confident": True,
+    "threshold": 0.5,
+    "crops_covered": ["Tomato"],
+}
 
 
 class FakeClient:
     def __init__(self, reply, calls):
         self.calls = calls
-        create = lambda **kw: (calls.setdefault("chat", kw), types.SimpleNamespace(
-            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=reply))]))[1]
-        transcribe = lambda **kw: (calls.setdefault("asr", kw), "my tomato leaves have black patches")[1]
+        create = lambda **kw: (
+            calls.setdefault("chat", kw),
+            types.SimpleNamespace(
+                choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=reply))]
+            ),
+        )[1]
+        transcribe = lambda **kw: (
+            calls.setdefault("asr", kw),
+            "my tomato leaves have black patches",
+        )[1]
         self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=create))
         self.audio = types.SimpleNamespace(transcriptions=types.SimpleNamespace(create=transcribe))
 
@@ -106,7 +124,9 @@ def test_rules_are_in_the_prompt(app, monkeypatch):
 
 def test_a_dose_in_the_reply_never_reaches_the_farmer(app, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-not-real")
-    app["reply"] = "**What to do now**\n- Spray mancozeb at 2.5 g per litre of water.\n- Remove spotted leaves."
+    app["reply"] = (
+        "**What to do now**\n- Spray mancozeb at 2.5 g per litre of water.\n- Remove spotted leaves."
+    )
     r = post(app, question="tomato leaves have black spots")
     body = r.json()
     assert "2.5 g" not in body["analysis"]
@@ -127,17 +147,21 @@ def test_root_reports_configuration(app, monkeypatch):
     assert app["client"].get("/").json()["provider"] == "groq"
 
 
-
 def test_oversized_photo_is_a_400_not_a_crash(app, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-not-real")
     monkeypatch.setattr(vision, "classify", REAL_CLASSIFY)
     monkeypatch.setattr(vision, "available", lambda: True)
-    monkeypatch.setattr(vision, "_load", lambda: pytest.fail("the model must not load for a refused photo"))
+    monkeypatch.setattr(
+        vision, "_load", lambda: pytest.fail("the model must not load for a refused photo")
+    )
     monkeypatch.setattr(vision, "MAX_PIXELS", 64 * 64)
     buf = io.BytesIO()
     Image.new("RGB", (65, 64)).save(buf, "PNG")
-    r = app["client"].post("/analyze/", files={"image_file": ("big.png", buf.getvalue(), "image/png")},
-                           data={"question": "what is wrong?"})
+    r = app["client"].post(
+        "/analyze/",
+        files={"image_file": ("big.png", buf.getvalue(), "image/png")},
+        data={"question": "what is wrong?"},
+    )
     assert r.status_code == 400
     assert "photo could not be read" in r.json()["detail"]
     assert "chat" not in app["calls"]

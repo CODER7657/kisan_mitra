@@ -42,8 +42,11 @@ def test_brands_are_caught():
 
 
 def test_check_removes_only_dose_sentences_and_adds_kvk():
-    r = guard.check("**What to do now**\n- Spray mancozeb 2.5 g per litre. Remove spotted leaves.\n"
-                    "| Product | Dose |\n| Mancozeb | 2 g/l |", "dose of mancozeb?")
+    r = guard.check(
+        "**What to do now**\n- Spray mancozeb 2.5 g per litre. Remove spotted leaves.\n"
+        "| Product | Dose |\n| Mancozeb | 2 g/l |",
+        "dose of mancozeb?",
+    )
     assert "2.5 g" not in r.text and "2 g/l" not in r.text
     assert "Remove spotted leaves." in r.text
     assert "| Product | Dose |" in r.text

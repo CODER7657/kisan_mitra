@@ -33,7 +33,10 @@ def test_window_slides():
 
 
 def test_client_key_uses_first_forwarded_address():
-    req = SimpleNamespace(headers={"x-forwarded-for": "203.0.113.7, 10.0.0.1"}, client=SimpleNamespace(host="10.0.0.1"))
+    req = SimpleNamespace(
+        headers={"x-forwarded-for": "203.0.113.7, 10.0.0.1"},
+        client=SimpleNamespace(host="10.0.0.1"),
+    )
     assert main.client_key(req) == "203.0.113.7"
     req = SimpleNamespace(headers={}, client=SimpleNamespace(host="198.51.100.2"))
     assert main.client_key(req) == "198.51.100.2"
