@@ -13,6 +13,8 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
+# mutmut working copy (backend/setup.cfg)
+mutants/
 
 # Photo classifier backbone (fetched by backend/scripts/get_model.py)
 backend/models/*.onnx
