@@ -153,7 +153,11 @@ def preprocess(image: Image.Image, spec: InputSpec = INPUT) -> Floats:
     left, top = int(round((nw - size) / 2.0)), int(round((nh - size) / 2.0))
     image = image.crop((left, top, left + size, top + size))
     x = np.asarray(image, dtype=np.float32) / 255.0
-    x = (x - np.array(spec["mean"], np.float32)) / np.array(spec["std"], np.float32)
+    # Explicit dtype: numpy's stubs widen this expression's type (float32 stays float32).
+    x = np.asarray(
+        (x - np.array(spec["mean"], np.float32)) / np.array(spec["std"], np.float32),
+        dtype=np.float32,
+    )
     return x.transpose(2, 0, 1)[None]
 
 
