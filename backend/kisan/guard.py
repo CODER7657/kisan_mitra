@@ -17,6 +17,7 @@ UNITS = [
     r"millilit(?:re|er)s?",
     r"l",
     r"lit(?:re|er)s?",
+    r"lit",
     r"lt",
     r"ltr",
     r"g",
@@ -37,6 +38,11 @@ UNITS = [
     r"bottles?",
     r"मिली",
     r"मि\.ली\.?",
+    # Short Hindi/Gujarati abbreviations only with their dot, so "5 લીલા પાન" (5 green
+    # leaves) is not read as 5 litres.
+    r"लि\.",
+    r"ग्रा\.",
+    r"कि\.?ग्रा\.",
     r"एमएल",
     r"लीटर",
     r"ली\.?",
@@ -48,6 +54,11 @@ UNITS = [
     r"बोरी",
     r"थैली",
     r"મિલી",
+    r"મિ\.લી\.?",
+    r"લિ\.",
+    r"લી\.",
+    r"ગ્રા\.",
+    r"કિ\.?ગ્રા\.",
     r"એમએલ",
     r"લિટર",
     r"લીટર",
@@ -57,7 +68,9 @@ UNITS = [
     r"થેલી",
     r"બોરી",
 ]
-QUANTITY = re.compile(rf"{NUMBER}\s*(?:{'|'.join(UNITS)})(?![a-z])", re.IGNORECASE)
+# Any unit may be written with a trailing dot ("5 kg.", "10 gm.", "2 ली.", "5 મિ.લી."): the dot
+# is part of the quantity, not the end of a sentence (see split_sentences).
+QUANTITY = re.compile(rf"{NUMBER}\s*(?:{'|'.join(UNITS)})\.?(?![a-z])", re.IGNORECASE)
 
 LATIN_CHEMICAL_WORDS = [
     r"pesticides?",
@@ -182,6 +195,12 @@ KVK = re.compile(
 )
 
 SENTENCE_END = re.compile(r"(?<=[.!?।])\s+")
+# A part that ends in a quantity whose unit is followed by a dot ("5 kg.", "2 ली.") is not a
+# finished sentence: splitting there would put the amount and the chemical in different
+# sentences and let the dose through. Built from QUANTITY, so every unit (and any unit added
+# later) is covered without a second list. Erring this way can merge a real sentence ending
+# in a quantity with the next one; the cost is an over-cautious removal, never a leaked dose.
+QUANTITY_DOT_END = re.compile(rf"(?:{QUANTITY.pattern})(?<=\.)$", re.IGNORECASE)
 
 NOTES = {
     "en": {
@@ -211,6 +230,23 @@ def script_language(text: str) -> str:
     return "gu" if gu >= hi else "hi"
 
 
+def split_sentences(line: str) -> list[str]:
+    """Sentences of one line. A merged sentence keeps the original text between its parts,
+    so a removed sentence is always an exact substring of the answer."""
+    sentences: list[str] = []
+    start = sentence_start = 0
+    for match in [*SENTENCE_END.finditer(line), None]:
+        end = match.start() if match else len(line)
+        if sentences and QUANTITY_DOT_END.search(sentences[-1]):
+            sentences[-1] = line[sentence_start:end]
+        else:
+            sentences.append(line[start:end])
+            sentence_start = start
+        if match:
+            start = match.end()
+    return sentences
+
+
 def is_dose(sentence: str) -> bool:
     return bool(QUANTITY.search(sentence)) and bool(CHEMICAL.search(sentence))
 
@@ -236,7 +272,7 @@ def check(answer: str, question: str = "", language: str | None = None) -> Guard
     removed: list[str] = []
     out_lines = []
     for line in answer.splitlines():
-        sentences = SENTENCE_END.split(line)
+        sentences = split_sentences(line)
         kept = [s for s in sentences if not (is_dose(s) or names_brand(s))]
         removed += [s.strip() for s in sentences if s not in kept]
         new = " ".join(kept).rstrip()
@@ -244,13 +280,17 @@ def check(answer: str, question: str = "", language: str | None = None) -> Guard
         if len(kept) < len(sentences) and not re.search(r"\w", new):
             continue
         out_lines.append(new)
-    text = "\n".join(out_lines).strip()
+    kept_text = "\n".join(out_lines).strip()
+    parts = [kept_text]
     if removed:
-        text += "\n\n" + notes["removed"].format(n=len(removed))
-    kvk_added = False
-    if (removed or mentions_chemicals(question) or mentions_chemicals(text)) and not KVK.search(
-        text
-    ):
-        text += "\n\n" + notes["kvk"]
-        kvk_added = True
+        parts.append(notes["removed"].format(n=len(removed)))
+    # The notes never name the KVK, so what is left of the answer decides the referral.
+    kvk_added = bool(
+        removed or mentions_chemicals(question) or mentions_chemicals(kept_text)
+    ) and not KVK.search(kept_text)
+    if kvk_added:
+        parts.append(notes["kvk"])
+    # Notes follow the answer after a blank line; with nothing left of the answer, the text
+    # starts with the first note rather than a blank line.
+    text = "\n\n".join(p for p in parts if p)
     return GuardResult(text=text, removed=removed, kvk_added=kvk_added)

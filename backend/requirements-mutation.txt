@@ -1,0 +1,4 @@
+# Mutation testing of the guard (setup.cfg, .github/workflows/mutation.yml), installed on
+# top of requirements-dev.txt in its own step: mutmut needs click>=8.4.2, newer than the
+# app's pin, and the guard tests do not use click. mutmut 3 forks, so Linux or macOS only.
+mutmut==3.8.1

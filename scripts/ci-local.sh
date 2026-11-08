@@ -7,7 +7,9 @@
 #
 # Backend: uses $PYTHON, else backend/.venv, else python3/python on PATH, with
 # backend/requirements-dev.txt installed. Frontend: Node 22 and `npm ci` already run (set
-# CI_LOCAL_NPM_CI=1 to run it here). Browser tests use an installed Chrome, as locally.
+# CI_LOCAL_NPM_CI=1 to run it here). Browser tests and Lighthouse use an installed Chrome
+# (or $CHROME_PATH); CI_LOCAL_LIGHTHOUSE=0 skips Lighthouse. The property tests of the
+# guard run inside pytest. Mutation testing (weekly in CI) needs Linux: see the README.
 # gitleaks is skipped with a warning if the binary is not on PATH (or in $GITLEAKS).
 set -euo pipefail
 
@@ -51,8 +53,8 @@ backend() {
 	local py
 	py="$(pick_python)"
 	step "python: $("$py" --version 2>&1) ($py)"
-	run "$py" -m ruff check .
-	run "$py" -m ruff format --check .
+	run "$py" -m ruff check --config ruff.toml . ../perf
+	run "$py" -m ruff format --config ruff.toml --check . ../perf
 	run "$py" -m bandit -q -r kisan main.py -lll
 	local ignores
 	mapfile -t ignores < <(sed -n 's/^\([A-Z][A-Za-z0-9-]*\).*/--ignore-vuln\n\1/p' pip-audit-ignore.txt)
@@ -87,6 +89,16 @@ frontend() {
 		return 1
 	fi
 	run npm run test:e2e
+	# Lighthouse budgets (lighthouserc.json), about a minute; CI_LOCAL_LIGHTHOUSE=0 skips it.
+	if [ "${CI_LOCAL_LIGHTHOUSE:-1}" = 0 ]; then
+		step "Lighthouse CI: SKIPPED (CI_LOCAL_LIGHTHOUSE=0)"
+	else
+		local chrome="C:/Program Files/Google/Chrome/Application/chrome.exe"
+		if [ -z "${CHROME_PATH:-}" ] && [ -x "$chrome" ]; then
+			export CHROME_PATH="$chrome"
+		fi
+		run npx lhci autorun --collect.settings.chromeFlags="--headless=new --no-sandbox"
+	fi
 }
 
 gitleaks_scan() {

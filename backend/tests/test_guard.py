@@ -70,3 +70,79 @@ def test_notes_follow_the_language():
     assert guard.script_language("ઘઉંમાં પિયત") == "gu"
     assert guard.script_language("गेहूं की सिंचाई") == "hi"
     assert guard.script_language("wheat irrigation") == "en"
+
+
+# Edge cases found by mutation testing (setup.cfg, .github/workflows/mutation.yml): each
+# pins behaviour a surviving mutant changed without any test noticing.
+
+
+def test_script_blocks_include_their_first_and_last_code_points():
+    assert guard.script_language("\u0a80") == "gu" and guard.script_language("\u0aff") == "gu"
+    assert guard.script_language("\u0900") == "hi" and guard.script_language("\u097f") == "hi"
+
+
+def test_equal_gujarati_and_devanagari_counts_read_as_gujarati():
+    assert guard.script_language("क ક") == "gu"
+
+
+def test_notes_follow_the_answer_language_when_there_is_no_question():
+    r = guard.check("गेहूं में 50 किलो यूरिया प्रति एकड़ डालें।")
+    assert "कृषि विज्ञान केंद्र" in r.text
+
+
+def test_an_explicit_language_overrides_the_script():
+    r = guard.check("Spray 2 ml mancozeb per litre.", "", "hi")
+    assert "कृषि विज्ञान केंद्र" in r.text and "Krishi Vigyan Kendra (KVK) or" not in r.text
+
+
+def test_lines_after_a_dropped_line_and_indentation_are_kept():
+    r = guard.check(
+        "- Remove spotted leaves.  \n  - Keep them out of the field.\n| Mancozeb | 2 g/l |\nIrrigate in the morning."
+    )
+    assert r.text.startswith(
+        "- Remove spotted leaves.\n  - Keep them out of the field.\nIrrigate in the morning.\n\n"
+    )
+
+
+# Doses with a unit abbreviated by a dot used to leak: the dot was taken as the end of the
+# sentence, so the amount and the chemical were checked apart (found by property tests and
+# code review, 2026-11-08). Every one of these must be removed.
+@pytest.mark.parametrize(
+    "dose",
+    [
+        "Use 5 kg. urea per acre.",
+        "Mix 10 gm. mancozeb in water.",
+        "Take 2 lit. of neem oil spray.",
+        "Spray 2 ml. of imidacloprid per litre.",
+        "Mix 5 m.l. Then add 2 g. per litre of mancozeb.",
+        "200 मि.ली. दवा प्रति एकड़ डालें।",
+        "2 ली. दवा डालें।",
+        "5 ग्रा. मैनकोजेब डालें।",
+        "2 कि.ग्रा. यूरिया डालें।",
+        "5 મિ.લી. દવા છાંટો.",
+        "5 લિ. દવા છાંટો.",
+        "5 કિ.ગ્રા. ખાતર નાખો.",
+    ],
+)
+def test_dotted_units_never_split_a_dose(dose):
+    result = guard.check(dose)
+    assert result.removed, dose
+    assert not any(ch.isdigit() for ch in result.text.split("*")[0]), result.text
+
+
+@pytest.mark.parametrize(
+    "harmless",
+    [
+        "Irrigate every 3 days. Keep 2 acres for cotton.",
+        "Sow 20 kg. seed per acre.",
+        "5 લીલા પાન પર દવા ન છાંટો.",  # "5 green leaves", not 5 litres
+    ],
+)
+def test_dotted_units_do_not_remove_harmless_numbers(harmless):
+    assert guard.check(harmless).removed == []
+
+
+def test_removed_text_is_an_exact_substring_of_the_answer():
+    answer = "Use 5 m.l.  of imidacloprid. Water the field."
+    result = guard.check(answer)
+    assert result.removed and all(part in answer for part in result.removed)
