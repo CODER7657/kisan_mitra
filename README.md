@@ -74,7 +74,7 @@ stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 ## Test it
 
 ```bash
-cd backend && pytest                 # 91 tests, model provider stubbed, no keys needed
+cd backend && pytest                 # 136 tests, model provider stubbed, no keys needed
 cd frontend && npm test              # 49 unit tests
 cd frontend && npm run check         # svelte-check, and tsc for the browser tests
 # Browser tests (Playwright + axe) run against `vite preview` of a production build, with
@@ -95,10 +95,22 @@ Both parts run on Vercel's Hobby plan. Steps: [docs/DEPLOY.md](docs/DEPLOY.md).
 - **Backend:** a Python function (FastAPI preset, `backend/index.py`) in Mumbai (`bom1`,
   [backend/vercel.json](backend/vercel.json)). The photo classifier's int8 ONNX model is in
   git, so a cold start loads it from disk instead of downloading it. `GET /health` answered in
-  0.21 to 0.27 s in three consecutive calls.
+  0.21 to 0.27 s in three consecutive calls. `GET /ready` answers 200 only when a model
+  provider is configured and the photo classifier's files are in place, else 503 naming what
+  is missing (no model calls, no network).
+- **Settings and logs:** every environment variable is checked when the app starts, so a bad
+  value (a timeout of 0, say) stops it with the variable's name instead of failing on the
+  first question. Each request is logged as one JSON line (method, path, status,
+  duration, request id), never the question, answer, file names or IP, and every response
+  carries an `X-Request-ID` header to quote when reporting a problem.
 - **Frontend:** static files (`adapter-static`). A production build fails unless
   `VITE_API_URL` is a public `https` URL, so it can never ship a page that calls `localhost`.
   The page pings `/health` on load, so an idle function starts while the farmer fills the form.
+  A Content Security Policy (scripts by hash, no `unsafe-inline`; the page may only call
+  the API) is written into the page by SvelteKit, and [frontend/vercel.json](frontend/vercel.json)
+  adds `frame-ancestors 'none'`, HSTS, `Permissions-Policy` (microphone, location and camera
+  for this site only) and the other security headers. A browser test runs the Gujarati
+  journey under that policy.
 - **Uploads:** Vercel caps a request body at about 4.5 MB, so the page shrinks photos to at
   most 1600 px on the longer side and refuses a photo plus recording over 4 MB with a clear
   message before sending. The server still refuses photos over 8 MB or 30 MP.
@@ -124,7 +136,9 @@ Both parts run on Vercel's Hobby plan. Steps: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ```
 backend/
-  main.py              FastAPI app: /analyze/
+  main.py              FastAPI app: /analyze/, /health, /ready
+  kisan/config.py      settings from the environment, checked at startup; model provider
+  kisan/logs.py        JSON logs; kisan/middleware.py: request id, access log, headers
   kisan/answer.py      prompt, evidence block, model call
   kisan/guard.py       dose and brand guard, KVK referral, language detection
   kisan/vision.py      photo check (ONNX backbone + head)
@@ -132,7 +146,8 @@ backend/
   models/              dinov2_small_int8.onnx (24 MB backbone, committed so a cold start reads it
                        from disk), its Apache-2.0 licence, crop_head.json (trained head, 41 KB)
   scripts/             safety_eval.py, get_model.py
-frontend/              SvelteKit app: record or type, photo, language, read aloud
+frontend/              SvelteKit app: record or type, photo, language, read aloud;
+                       vercel.json: security headers
 notebooks/             photo-check training (and the fine-tuning comparison)
 eval/                  safety prompts and results, farmer-question kit, rubric
 docs/                  EVAL.md, REBUILD_PLAN.md

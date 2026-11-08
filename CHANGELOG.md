@@ -14,6 +14,18 @@ All notable changes to this project are documented here. The format follows
   bandit (high severity), `npm audit` for production dependencies, and a gitleaks scan
   of the full history on every push and pull request.
 - `scripts/ci-local.sh` runs the same checks locally when Actions minutes run out.
+- `GET /ready`: 200 when a model provider is configured and the photo classifier's files
+  are in place, otherwise 503 naming what is missing. `/health` stays the liveness check.
+- Every response has an `X-Request-ID` header (a caller's id is kept when it is a short
+  plain token), exposed to the browser through CORS.
+- Structured JSON logs (structlog): one line per request with method, path, status,
+  duration and request id; warnings and errors carry the request id too. No question,
+  transcript, answer, file name or IP address is logged.
+- Security headers for the site in `frontend/vercel.json` (CSP with `frame-ancestors
+  'none'`, HSTS, Permissions-Policy, Referrer-Policy, nosniff), and a SvelteKit CSP in
+  hash mode, so scripts are allowed by hash rather than `unsafe-inline`. A Playwright test
+  runs the Gujarati journey under these headers and fails on any CSP violation. The API
+  sends `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
 
 ### Changed
 
@@ -24,8 +36,19 @@ All notable changes to this project are documented here. The format follows
   vite and their dependencies). Vulnerabilities that need a major upgrade (starlette with
   FastAPI, pillow) are listed in `backend/pip-audit-ignore.txt`.
 
+- Configuration is read with pydantic-settings and checked at startup: a bad timeout,
+  retry count or rate limit stops the app with the variable's name (never its value).
+  Variable names and defaults are unchanged; keys and tokens are kept as secrets.
+- The photo classifier's download has connect and read timeouts (httpx) and still checks
+  the sha256; a failed download leaves no partial file. Uploads to Vercel Blob use an
+  explicit 10 s timeout.
+- CI builds the frontend against the production API URL, so the CSP test checks the
+  origin that ships.
+
 ### Fixed
 
+- `/health` GET and HEAD no longer share one OpenAPI operation id (FastAPI's duplicate
+  operation id warning).
 - The safety evaluation closes its results file before the CI step that uploads it.
 
 ## [1.0.0] - 2026-11-07
