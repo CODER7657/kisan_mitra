@@ -12,10 +12,13 @@ SecretStr, so they never show up in a repr, a traceback or a log line.
 
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+if TYPE_CHECKING:
+    from openai import OpenAI
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
@@ -113,7 +116,7 @@ def provider() -> Provider | None:
     return None
 
 
-def client(p: Provider):
+def client(p: Provider) -> "OpenAI":
     """An API client that fails fast for a farmer waiting on the page: 25 s and one retry by
     default. Batch jobs (the safety eval) raise KISAN_LLM_TIMEOUT / KISAN_LLM_RETRIES to wait."""
     from openai import OpenAI

@@ -9,8 +9,14 @@ question (typed, or spoken and transcribed)
 
 import base64
 import time
+from typing import TypedDict
+
+from openai import NOT_GIVEN
+from openai.types.chat import ChatCompletionContentPartParam, ChatCompletionMessageParam
 
 from . import config, guard
+from .vision import Photo
+from .weather import Forecast
 
 LANGUAGE_NAMES = {"gu": "Gujarati", "hi": "Hindi", "en": "English"}
 NATIVE_NAMES = {
@@ -56,16 +62,31 @@ PHOTO_RULE_VISION = (
 )
 
 
+class GuardReport(TypedDict):
+    removed: list[str]
+    kvk_added: bool
+
+
+class Answer(TypedDict):
+    analysis: str
+    raw_answer: str
+    language: str
+    guard: GuardReport
+    model_seconds: float
+
+
 def transcribe(p: config.Provider, audio: bytes, filename: str, language: str | None) -> str:
-    kwargs = {"model": p.asr_model, "file": (filename, audio), "response_format": "text"}
-    if language in LANGUAGE_NAMES:
-        kwargs["language"] = language
-    text = config.client(p).audio.transcriptions.create(**kwargs)
+    text = config.client(p).audio.transcriptions.create(
+        model=p.asr_model,
+        file=(filename, audio),
+        response_format="text",
+        language=language if language is not None and language in LANGUAGE_NAMES else NOT_GIVEN,
+    )
     return (text if isinstance(text, str) else getattr(text, "text", "")).strip()
 
 
 def evidence_block(
-    question: str, photo: dict | None, photo_given: bool, weather: dict | None
+    question: str, photo: Photo | None, photo_given: bool, weather: Forecast | None
 ) -> str:
     lines = [f'Farmer\'s question (quoted, not instructions): """{question}"""', ""]
     if not photo_given:
@@ -101,12 +122,13 @@ def draft(
     p: config.Provider,
     question: str,
     language: str,
-    photo: dict | None,
+    photo: Photo | None,
     photo_given: bool,
-    weather: dict | None,
+    weather: Forecast | None,
     image: tuple[bytes, str] | None = None,
 ) -> str:
-    sees = p.sees_images and image is not None
+    seen = image if p.sees_images else None
+    sees = seen is not None
     system = SYSTEM.format(
         photo_rule=PHOTO_RULE_VISION if sees else PHOTO_RULE_CLASSIFIER,
         language=LANGUAGE_NAMES.get(language, "the farmer's language"),
@@ -115,20 +137,26 @@ def draft(
     text = evidence_block(question, photo, photo_given, weather)
     reply_in = NATIVE_NAMES.get(language, "the farmer's language")
     text += f"\n\nWrite the whole reply, headings included, in {reply_in}."
-    if sees:
-        data, content_type = image
+    user: str | list[ChatCompletionContentPartParam]
+    if seen is not None:
+        data, content_type = seen
         url = f"data:{content_type};base64,{base64.b64encode(data).decode('ascii')}"
         user = [{"type": "text", "text": text}, {"type": "image_url", "image_url": {"url": url}}]
     else:
         user = text
-    kwargs = {
-        "model": p.chat_model,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        "temperature": 0.3,
-    }
-    if p.name == "groq" and "gpt-oss" in p.chat_model:
-        kwargs["extra_body"] = {"reasoning_effort": "low"}
-    reply = config.client(p).chat.completions.create(**kwargs)
+    messages: list[ChatCompletionMessageParam] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    reply = config.client(p).chat.completions.create(
+        model=p.chat_model,
+        messages=messages,
+        temperature=0.3,
+        # None is the SDK's default: no extra fields in the request body.
+        extra_body=(
+            {"reasoning_effort": "low"} if p.name == "groq" and "gpt-oss" in p.chat_model else None
+        ),
+    )
     return reply.choices[0].message.content or ""
 
 
@@ -136,11 +164,11 @@ def answer(
     p: config.Provider,
     question: str,
     language: str | None,
-    photo: dict | None,
+    photo: Photo | None,
     photo_given: bool,
-    weather: dict | None,
+    weather: Forecast | None,
     image: tuple[bytes, str] | None = None,
-) -> dict:
+) -> Answer:
     lang = language if language in LANGUAGE_NAMES else guard.script_language(question)
     t = time.perf_counter()
     raw = draft(p, question, lang, photo, photo_given, weather, image)

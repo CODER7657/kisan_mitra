@@ -12,14 +12,17 @@ import logging
 import re
 import sys
 import uuid
+from typing import TextIO
 
 import structlog
+from structlog.typing import Processor
 
 LOGGER = "kisan_mitra"
 REQUEST_ID_HEADER = "X-Request-ID"
 _SAFE_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_HANDLER_NAME = "kisan_json"
 
-_SHARED = [
+_SHARED: list[Processor] = [
     structlog.contextvars.merge_contextvars,
     structlog.stdlib.add_log_level,
     structlog.stdlib.add_logger_name,
@@ -47,7 +50,7 @@ def formatter() -> logging.Formatter:
     )
 
 
-def setup(stream=None) -> logging.Logger:
+def setup(stream: TextIO | None = None) -> logging.Logger:
     """Attach the JSON handler to the app's logger once; safe to call again (e.g. on reload)."""
     structlog.configure(
         processors=[*_SHARED, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
@@ -59,13 +62,14 @@ def setup(stream=None) -> logging.Logger:
     log.setLevel(logging.INFO)
     # JSON only: a host that installs a root handler would otherwise print every line twice.
     log.propagate = False
-    if not any(getattr(h, "_kisan_json", False) for h in log.handlers):
+    if not any(h.get_name() == _HANDLER_NAME for h in log.handlers):
         handler = logging.StreamHandler(stream or sys.stdout)
         handler.setFormatter(formatter())
-        handler._kisan_json = True
+        # Found by name, not class, so a reloaded module still sees the handler it added.
+        handler.set_name(_HANDLER_NAME)
         log.addHandler(handler)
     return log
 
 
-def get_logger():
-    return structlog.get_logger(LOGGER)
+def get_logger() -> structlog.stdlib.BoundLogger:
+    return structlog.stdlib.get_logger(LOGGER)

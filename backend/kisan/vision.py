@@ -14,11 +14,47 @@ import io
 import json
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from kisan import config, model_store
+
+if TYPE_CHECKING:
+    from onnxruntime import InferenceSession
+
+Floats = NDArray[np.float32]
+
+
+class InputSpec(TypedDict):
+    size: int
+    resize_short_side: int
+    mean: list[float]
+    std: list[float]
+
+
+class Head(TypedDict):
+    W: Floats
+    b: Floats
+    classes: list[str]
+    threshold: float
+
+
+class Guess(TypedDict):
+    label: str
+    crop: str
+    condition: str
+    probability: float
+
+
+class Photo(TypedDict):
+    guesses: list[Guess]
+    confident: bool
+    threshold: float
+    crops_covered: list[str]
+
 
 #: Override for tests; None means CROP_MODEL_DIR, else backend/models. Resolved when used, not at
 #: import, so importing the classifier does not validate (and fail on) unrelated settings, and
@@ -35,7 +71,7 @@ def model_dir() -> Path:
 
 BACKBONE_FILE = model_store.FILENAME
 HEAD_FILE = "crop_head.json"
-INPUT = {
+INPUT: InputSpec = {
     "size": 224,
     "resize_short_side": 256,
     "mean": [0.485, 0.456, 0.406],
@@ -56,7 +92,7 @@ def readable(label: str) -> tuple[str, str]:
     return crop.replace("_", " "), condition[:1].upper() + condition[1:]
 
 
-def load_head(path: Path) -> dict:
+def load_head(path: Path) -> Head:
     """Decode the head file: int8 weights with one float32 scale per class, and a float32 bias."""
     meta = json.loads(path.read_text(encoding="utf-8"))
     blob = meta["weights_base64"]
@@ -70,7 +106,7 @@ def load_head(path: Path) -> dict:
 
 
 @lru_cache(maxsize=1)
-def _load():
+def _load() -> tuple["InferenceSession", Head]:
     import onnxruntime as ort
 
     path = model_store.backbone_path(model_dir())
@@ -104,7 +140,7 @@ def open_photo(image_bytes: bytes) -> Image.Image:
     return image
 
 
-def preprocess(image: Image.Image, spec: dict = INPUT) -> np.ndarray:
+def preprocess(image: Image.Image, spec: InputSpec = INPUT) -> Floats:
     """Resize the short side, centre-crop and normalise, exactly as in the training notebook."""
     size, short = spec["size"], spec["resize_short_side"]
     image = image.convert("RGB")
@@ -113,7 +149,7 @@ def preprocess(image: Image.Image, spec: dict = INPUT) -> np.ndarray:
     )  # training photos were stored at most 448 px wide; phone photos are larger
     w, h = image.size
     nw, nh = (short, int(short * h / w)) if w <= h else (int(short * w / h), short)
-    image = image.resize((nw, nh), Image.BILINEAR)
+    image = image.resize((nw, nh), Image.Resampling.BILINEAR)
     left, top = int(round((nw - size) / 2.0)), int(round((nh - size) / 2.0))
     image = image.crop((left, top, left + size, top + size))
     x = np.asarray(image, dtype=np.float32) / 255.0
@@ -121,26 +157,28 @@ def preprocess(image: Image.Image, spec: dict = INPUT) -> np.ndarray:
     return x.transpose(2, 0, 1)[None]
 
 
-def features(session, x: np.ndarray) -> np.ndarray:
-    h = session.run(["last_hidden_state"], {session.get_inputs()[0].name: x})[0]
+def features(session: "InferenceSession", x: Floats) -> Floats:
+    # onnxruntime is untyped; the backbone outputs float32 (batch, tokens, 384).
+    h: Floats = session.run(["last_hidden_state"], {session.get_inputs()[0].name: x})[0]
     return np.concatenate([h[:, 0], h[:, 1:].mean(1)], 1)
 
 
-def probabilities(head: dict, f: np.ndarray) -> np.ndarray:
+def probabilities(head: Head, f: Floats) -> Floats:
     z = f @ head["W"].T + head["b"]
     z -= z.max(axis=1, keepdims=True)
-    p = np.exp(z)
-    return p / p.sum(axis=1, keepdims=True)
+    p: Floats = np.exp(z)  # numpy 2.1 types ufunc results as Any
+    total: Floats = p.sum(axis=1, keepdims=True)  # and keepdims sums too
+    return p / total
 
 
-def classify(image_bytes: bytes, top_k: int = 3) -> dict | None:
+def classify(image_bytes: bytes, top_k: int = 3) -> Photo | None:
     """Top guesses with probabilities, or None if the model isn't installed."""
     if not available():
         return None
     x = preprocess(open_photo(image_bytes))
     session, head = _load()
     p = probabilities(head, features(session, x))[0]
-    guesses = []
+    guesses: list[Guess] = []
     for i in np.argsort(-p)[:top_k]:
         crop, condition = readable(head["classes"][i])
         guesses.append(
