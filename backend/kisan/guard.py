@@ -17,6 +17,7 @@ UNITS = [
     r"millilit(?:re|er)s?",
     r"l",
     r"lit(?:re|er)s?",
+    r"lit",
     r"lt",
     r"ltr",
     r"g",
@@ -37,6 +38,11 @@ UNITS = [
     r"bottles?",
     r"मिली",
     r"मि\.ली\.?",
+    # Short Hindi/Gujarati abbreviations only with their dot, so "5 લીલા પાન" (5 green
+    # leaves) is not read as 5 litres.
+    r"लि\.",
+    r"ग्रा\.",
+    r"कि\.?ग्रा\.",
     r"एमएल",
     r"लीटर",
     r"ली\.?",
@@ -48,6 +54,11 @@ UNITS = [
     r"बोरी",
     r"थैली",
     r"મિલી",
+    r"મિ\.લી\.?",
+    r"લિ\.",
+    r"લી\.",
+    r"ગ્રા\.",
+    r"કિ\.?ગ્રા\.",
     r"એમએલ",
     r"લિટર",
     r"લીટર",
@@ -57,7 +68,9 @@ UNITS = [
     r"થેલી",
     r"બોરી",
 ]
-QUANTITY = re.compile(rf"{NUMBER}\s*(?:{'|'.join(UNITS)})(?![a-z])", re.IGNORECASE)
+# Any unit may be written with a trailing dot ("5 kg.", "10 gm.", "2 ली.", "5 મિ.લી."): the dot
+# is part of the quantity, not the end of a sentence (see split_sentences).
+QUANTITY = re.compile(rf"{NUMBER}\s*(?:{'|'.join(UNITS)})\.?(?![a-z])", re.IGNORECASE)
 
 LATIN_CHEMICAL_WORDS = [
     r"pesticides?",
@@ -182,9 +195,12 @@ KVK = re.compile(
 )
 
 SENTENCE_END = re.compile(r"(?<=[.!?।])\s+")
-# Units abbreviated with a dot ("5 m.l. of ...") do not end a sentence: splitting there
-# would put the quantity and the chemical in different sentences and let the dose through.
-DOTTED_UNIT_END = re.compile(rf"{NUMBER}\s*(?:m\.l\.|मि\.ली\.|ली\.)$", re.IGNORECASE)
+# A part that ends in a quantity whose unit is followed by a dot ("5 kg.", "2 ली.") is not a
+# finished sentence: splitting there would put the amount and the chemical in different
+# sentences and let the dose through. Built from QUANTITY, so every unit (and any unit added
+# later) is covered without a second list. Erring this way can merge a real sentence ending
+# in a quantity with the next one; the cost is an over-cautious removal, never a leaked dose.
+QUANTITY_DOT_END = re.compile(rf"(?:{QUANTITY.pattern})(?<=\.)$", re.IGNORECASE)
 
 NOTES = {
     "en": {
@@ -215,12 +231,19 @@ def script_language(text: str) -> str:
 
 
 def split_sentences(line: str) -> list[str]:
+    """Sentences of one line. A merged sentence keeps the original text between its parts,
+    so a removed sentence is always an exact substring of the answer."""
     sentences: list[str] = []
-    for part in SENTENCE_END.split(line):
-        if sentences and DOTTED_UNIT_END.search(sentences[-1]):
-            sentences[-1] += " " + part
+    start = sentence_start = 0
+    for match in [*SENTENCE_END.finditer(line), None]:
+        end = match.start() if match else len(line)
+        if sentences and QUANTITY_DOT_END.search(sentences[-1]):
+            sentences[-1] = line[sentence_start:end]
         else:
-            sentences.append(part)
+            sentences.append(line[start:end])
+            sentence_start = start
+        if match:
+            start = match.end()
     return sentences
 
 

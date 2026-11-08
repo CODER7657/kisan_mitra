@@ -62,7 +62,12 @@ def numbers(draw):
 @st.composite
 def dose_sentences(draw):
     """A sentence giving an amount of a chemical, in any of the three languages."""
-    amount = f"{draw(numbers())} {draw(st.sampled_from(UNITS))}"
+    unit = draw(st.sampled_from(UNITS))
+    # Any unit may be abbreviated with a trailing dot ("5 kg. urea"): the dot must never end
+    # the sentence and split the amount from the chemical.
+    if not unit.endswith(".") and unit != "%" and draw(st.booleans()):
+        unit += "."
+    amount = f"{draw(numbers())} {unit}"
     chemical = draw(st.sampled_from(CHEMICALS))
     template = draw(
         st.sampled_from(
