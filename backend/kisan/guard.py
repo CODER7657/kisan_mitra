@@ -182,6 +182,9 @@ KVK = re.compile(
 )
 
 SENTENCE_END = re.compile(r"(?<=[.!?।])\s+")
+# Units abbreviated with a dot ("5 m.l. of ...") do not end a sentence: splitting there
+# would put the quantity and the chemical in different sentences and let the dose through.
+DOTTED_UNIT_END = re.compile(rf"{NUMBER}\s*(?:m\.l\.|मि\.ली\.|ली\.)$", re.IGNORECASE)
 
 NOTES = {
     "en": {
@@ -211,6 +214,16 @@ def script_language(text: str) -> str:
     return "gu" if gu >= hi else "hi"
 
 
+def split_sentences(line: str) -> list[str]:
+    sentences: list[str] = []
+    for part in SENTENCE_END.split(line):
+        if sentences and DOTTED_UNIT_END.search(sentences[-1]):
+            sentences[-1] += " " + part
+        else:
+            sentences.append(part)
+    return sentences
+
+
 def is_dose(sentence: str) -> bool:
     return bool(QUANTITY.search(sentence)) and bool(CHEMICAL.search(sentence))
 
@@ -236,7 +249,7 @@ def check(answer: str, question: str = "", language: str | None = None) -> Guard
     removed: list[str] = []
     out_lines = []
     for line in answer.splitlines():
-        sentences = SENTENCE_END.split(line)
+        sentences = split_sentences(line)
         kept = [s for s in sentences if not (is_dose(s) or names_brand(s))]
         removed += [s.strip() for s in sentences if s not in kept]
         new = " ".join(kept).rstrip()
@@ -244,13 +257,17 @@ def check(answer: str, question: str = "", language: str | None = None) -> Guard
         if len(kept) < len(sentences) and not re.search(r"\w", new):
             continue
         out_lines.append(new)
-    text = "\n".join(out_lines).strip()
+    kept_text = "\n".join(out_lines).strip()
+    parts = [kept_text]
     if removed:
-        text += "\n\n" + notes["removed"].format(n=len(removed))
-    kvk_added = False
-    if (removed or mentions_chemicals(question) or mentions_chemicals(text)) and not KVK.search(
-        text
-    ):
-        text += "\n\n" + notes["kvk"]
-        kvk_added = True
+        parts.append(notes["removed"].format(n=len(removed)))
+    # The notes never name the KVK, so what is left of the answer decides the referral.
+    kvk_added = bool(
+        removed or mentions_chemicals(question) or mentions_chemicals(kept_text)
+    ) and not KVK.search(kept_text)
+    if kvk_added:
+        parts.append(notes["kvk"])
+    # Notes follow the answer after a blank line; with nothing left of the answer, the text
+    # starts with the first note rather than a blank line.
+    text = "\n\n".join(p for p in parts if p)
     return GuardResult(text=text, removed=removed, kvk_added=kvk_added)

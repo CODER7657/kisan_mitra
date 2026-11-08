@@ -70,3 +70,35 @@ def test_notes_follow_the_language():
     assert guard.script_language("ઘઉંમાં પિયત") == "gu"
     assert guard.script_language("गेहूं की सिंचाई") == "hi"
     assert guard.script_language("wheat irrigation") == "en"
+
+
+# Edge cases found by mutation testing (setup.cfg, .github/workflows/mutation.yml): each
+# pins behaviour a surviving mutant changed without any test noticing.
+
+
+def test_script_blocks_include_their_first_and_last_code_points():
+    assert guard.script_language("\u0a80") == "gu" and guard.script_language("\u0aff") == "gu"
+    assert guard.script_language("\u0900") == "hi" and guard.script_language("\u097f") == "hi"
+
+
+def test_equal_gujarati_and_devanagari_counts_read_as_gujarati():
+    assert guard.script_language("क ક") == "gu"
+
+
+def test_notes_follow_the_answer_language_when_there_is_no_question():
+    r = guard.check("गेहूं में 50 किलो यूरिया प्रति एकड़ डालें।")
+    assert "कृषि विज्ञान केंद्र" in r.text
+
+
+def test_an_explicit_language_overrides_the_script():
+    r = guard.check("Spray 2 ml mancozeb per litre.", "", "hi")
+    assert "कृषि विज्ञान केंद्र" in r.text and "Krishi Vigyan Kendra (KVK) or" not in r.text
+
+
+def test_lines_after_a_dropped_line_and_indentation_are_kept():
+    r = guard.check(
+        "- Remove spotted leaves.  \n  - Keep them out of the field.\n| Mancozeb | 2 g/l |\nIrrigate in the morning."
+    )
+    assert r.text.startswith(
+        "- Remove spotted leaves.\n  - Keep them out of the field.\nIrrigate in the morning.\n\n"
+    )
