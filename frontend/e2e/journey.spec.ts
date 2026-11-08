@@ -202,13 +202,16 @@ test('Read aloud speaks a Gujarati answer with a Gujarati voice, in chunks, and 
 	await askInGujarati(page);
 	await page.getByRole('button', { name: 'Read aloud' }).click();
 	await expect(page.getByRole('button', { name: 'Stop reading' })).toBeVisible();
-	const spoken = await page.evaluate(() =>
-		(window as unknown as { __spoken: { text: string; lang: string }[] }).__spoken.map((u) => ({
-			lang: u.lang,
-			len: u.text.length
-		}))
-	);
-	expect(spoken.length).toBeGreaterThan(0);
+	// Utterances are queued one tick after cancel() (the Chrome workaround), so poll.
+	const read = () =>
+		page.evaluate(() =>
+			(window as unknown as { __spoken: { text: string; lang: string }[] }).__spoken.map((u) => ({
+				lang: u.lang,
+				len: u.text.length
+			}))
+		);
+	await expect.poll(async () => (await read()).length).toBeGreaterThan(0);
+	const spoken = await read();
 	expect(spoken.every((u) => u.lang === 'gu-IN' && u.len > 0 && u.len <= 180)).toBe(true);
 	await page.getByRole('button', { name: 'Stop reading' }).click();
 	await expect(page.getByRole('button', { name: 'Read aloud' })).toBeVisible();
