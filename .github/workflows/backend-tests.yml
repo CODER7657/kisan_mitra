@@ -28,6 +28,9 @@ jobs:
         run: ruff check --config ruff.toml . ../perf
       - name: format (ruff)
         run: ruff format --config ruff.toml --check . ../perf
+      # Settings in mypy.ini: --strict on kisan/ and main.py.
+      - name: types (mypy --strict)
+        run: mypy
       - name: security lint, high severity (bandit)
         run: bandit -r kisan main.py -lll
       # Known vulnerabilities fail the build, except any listed with a reason in
@@ -55,6 +58,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      # typescript-eslint strictTypeChecked + eslint-plugin-svelte (eslint.config.js).
+      - name: lint (ESLint)
+        run: npm run lint
+      - name: format (Prettier)
+        run: npm run format:check
       # Only what ships to the browser; dev tooling advisories are handled by Dependabot.
       - name: dependency vulnerabilities, high and above (npm audit)
         run: npm audit --omit=dev --audit-level=high

@@ -39,6 +39,11 @@ All notable changes to this project are documented here. The format follows
 - Lighthouse CI on the production build in the frontend job (`frontend/lighthouserc.json`):
   mobile Performance, Best Practices and SEO at least 0.90, Accessibility at least 0.95.
   Reports are kept as a workflow artifact; nothing is uploaded to a Lighthouse server.
+- Strict types and lint in CI and `scripts/ci-local.sh`: mypy `--strict` on `backend/kisan/`
+  and `backend/main.py` (`backend/mypy.ini`), ESLint with typescript-eslint
+  `strictTypeChecked` and eslint-plugin-svelte (`frontend/eslint.config.js`), and a
+  Prettier check of the frontend. The one-time Prettier reformat is listed in
+  `.git-blame-ignore-revs`.
 
 ### Changed
 
@@ -59,6 +64,9 @@ All notable changes to this project are documented here. The format follows
   origin that ships.
 
 ### Fixed
+
+- "Ask another question" threw a `ReferenceError` in browsers without the Web Speech API
+  (found by the new lint); a browser test covers it.
 
 - `/health` GET and HEAD no longer share one OpenAPI operation id (FastAPI's duplicate
   operation id warning).

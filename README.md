@@ -77,9 +77,12 @@ stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 ## Test it
 
 ```bash
-cd backend && pytest                 # 175 tests, model provider stubbed, no keys needed
+cd backend && pytest                 # 180 tests, model provider stubbed, no keys needed
+cd backend && mypy                   # strict types on kisan/ and main.py (mypy.ini)
 cd frontend && npm test              # 49 unit tests
 cd frontend && npm run check         # svelte-check, and tsc for the browser tests
+cd frontend && npm run lint          # ESLint: typescript-eslint strict, type-checked
+cd frontend && npm run format:check  # Prettier (npm run format rewrites)
 # Browser tests (Playwright + axe) run against `vite preview` of a production build, with
 # the backend mocked. Locally they use an installed Chrome; CI installs Playwright's Chromium.
 cd frontend && VITE_API_URL=https://kisan-mitra-api.vercel.app npm run build && npm run test:e2e
