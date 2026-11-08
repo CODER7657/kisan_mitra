@@ -25,9 +25,9 @@ jobs:
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r requirements-dev.txt
       - name: lint (ruff)
-        run: ruff check .
+        run: ruff check --config ruff.toml . ../perf
       - name: format (ruff)
-        run: ruff format --check .
+        run: ruff format --config ruff.toml --check . ../perf
       - name: security lint, high severity (bandit)
         run: bandit -r kisan main.py -lll
       # Known vulnerabilities fail the build, except any listed with a reason in

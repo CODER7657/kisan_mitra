@@ -51,8 +51,8 @@ backend() {
 	local py
 	py="$(pick_python)"
 	step "python: $("$py" --version 2>&1) ($py)"
-	run "$py" -m ruff check .
-	run "$py" -m ruff format --check .
+	run "$py" -m ruff check --config ruff.toml . ../perf
+	run "$py" -m ruff format --config ruff.toml --check . ../perf
 	run "$py" -m bandit -q -r kisan main.py -lll
 	local ignores
 	mapfile -t ignores < <(sed -n 's/^\([A-Z][A-Za-z0-9-]*\).*/--ignore-vuln\n\1/p' pip-audit-ignore.txt)
