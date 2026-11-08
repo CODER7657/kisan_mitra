@@ -34,17 +34,17 @@ describe('productionProblem', () => {
 
 describe('resolveApiUrl', () => {
 	it('falls back to the local backend only in dev', () => {
-		expect(resolveApiUrl(undefined, true)).toBe(DEV_API_URL);
-		expect(resolveApiUrl(undefined, false)).toBeNull();
+		expect(resolveApiUrl(undefined, DEV_API_URL)).toBe(DEV_API_URL);
+		expect(resolveApiUrl(undefined)).toBeNull();
 	});
 
 	it('never lets a production build call localhost', () => {
-		expect(resolveApiUrl('http://localhost:8000', false)).toBeNull();
+		expect(resolveApiUrl('http://localhost:8000')).toBeNull();
 	});
 
 	it('trims trailing slashes and whitespace', () => {
-		expect(resolveApiUrl(' https://api.example.org// ', false)).toBe('https://api.example.org');
-		expect(resolveApiUrl('http://localhost:9000/', true)).toBe('http://localhost:9000');
+		expect(resolveApiUrl(' https://api.example.org// ')).toBe('https://api.example.org');
+		expect(resolveApiUrl('http://localhost:9000/', DEV_API_URL)).toBe('http://localhost:9000');
 	});
 });
 

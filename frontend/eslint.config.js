@@ -8,7 +8,6 @@ import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 import { defineConfig } from 'eslint/config';
-import svelteConfig from './svelte.config.js';
 
 export default defineConfig(
 	{
@@ -53,8 +52,7 @@ export default defineConfig(
 		files: ['**/*.svelte', '**/*.svelte.ts'],
 		languageOptions: {
 			parserOptions: {
-				parser: ts.parser,
-				svelteConfig
+				parser: ts.parser
 			}
 		}
 	},

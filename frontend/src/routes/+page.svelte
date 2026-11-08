@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { marked } from 'marked';
 	import { onDestroy, onMount } from 'svelte';
-	import { readReply, resolveApiUrl } from '$lib/api';
-	import { formatDuration, loadingMessage } from '$lib/ui';
-	import { MAX_RECORDING_MS, shrinkPhoto, tooLargeMessage } from '$lib/upload';
-	import { SKY_LABEL, skyForDay, type Sky } from '$lib/weather';
+	import { DEV_API_URL, readReply, resolveApiUrl } from '#lib/api.ts';
+	import { formatDuration, loadingMessage } from '#lib/ui.ts';
+	import { MAX_RECORDING_MS, shrinkPhoto, tooLargeMessage } from '#lib/upload.ts';
+	import { SKY_LABEL, skyForDay, type Sky } from '#lib/weather.ts';
 	import Camera from 'lucide-svelte/icons/camera';
 	import Cloud from 'lucide-svelte/icons/cloud';
 	import CloudDrizzle from 'lucide-svelte/icons/cloud-drizzle';
@@ -30,7 +30,10 @@
 
 	// Backend URL: set VITE_API_URL when building for production. Null means no backend is
 	// configured, and the page says the service is unavailable instead of calling localhost.
-	const API_URL = resolveApiUrl(import.meta.env.VITE_API_URL, import.meta.env.DEV);
+	const API_URL = resolveApiUrl(
+		import.meta.env.VITE_API_URL,
+		import.meta.env.DEV ? DEV_API_URL : undefined
+	);
 
 	// A serverless backend may be cold after a quiet spell; start it while the farmer fills the form.
 	onMount(() => {
@@ -428,7 +431,7 @@
 </footer>
 
 <style>
-	/* Restrained Bohemian. Every colour, font and size comes from $lib/tokens.css. */
+	/* Restrained Bohemian. Every colour, font and size comes from #lib/tokens.css. */
 
 	/* Header band: rust with a low-contrast folk dot pattern, the only patterned area. */
 	.top {

@@ -46,9 +46,14 @@ export async function readReply(response: Response): Promise<unknown> {
 	throw new Error(`Something went wrong (HTTP ${response.status}). Please try again.`);
 }
 
-/** The backend base URL without a trailing slash, or null when the service is unavailable. */
-export function resolveApiUrl(url: string | undefined, dev: boolean): string | null {
+/**
+ * The backend base URL without a trailing slash, or null when the service is unavailable.
+ * `devFallback` is given only in dev (`import.meta.env.DEV ? DEV_API_URL : undefined` at
+ * the call site), so a production build folds it away and never contains a local URL:
+ * that must not depend on the bundler tracing a constant into this function.
+ */
+export function resolveApiUrl(url: string | undefined, devFallback?: string): string | null {
 	const value = (url ?? '').trim();
-	if (dev) return (value || DEV_API_URL).replace(/\/+$/, '');
+	if (devFallback !== undefined) return (value || devFallback).replace(/\/+$/, '');
 	return productionProblem(value) ? null : value.replace(/\/+$/, '');
 }
