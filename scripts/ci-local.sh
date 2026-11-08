@@ -55,6 +55,7 @@ backend() {
 	step "python: $("$py" --version 2>&1) ($py)"
 	run "$py" -m ruff check --config ruff.toml . ../perf
 	run "$py" -m ruff format --config ruff.toml --check . ../perf
+	run "$py" -m mypy
 	run "$py" -m bandit -q -r kisan main.py -lll
 	local ignores
 	mapfile -t ignores < <(sed -n 's/^\([A-Z][A-Za-z0-9-]*\).*/--ignore-vuln\n\1/p' pip-audit-ignore.txt)
@@ -70,6 +71,8 @@ frontend() {
 	if [ "${CI_LOCAL_NPM_CI:-0}" = 1 ]; then
 		run npm ci
 	fi
+	run npm run lint
+	run npm run format:check
 	run npm audit --omit=dev --audit-level=high
 	run npm run check
 	run npm test

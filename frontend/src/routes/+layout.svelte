@@ -13,8 +13,9 @@
 	// Fetch the two fonts every visitor sees first early, so text does not jump when they arrive.
 	import frauncesHeading from '@fontsource/fraunces/files/fraunces-latin-600-normal.woff2?url';
 	import notoBody from '@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2?url';
+	import type { Snippet } from 'svelte';
 
-	let { children } = $props();
+	let { children }: { children: Snippet } = $props();
 </script>
 
 <svelte:head>
@@ -23,4 +24,4 @@
 	<link rel="preload" href={notoBody} as="font" type="font/woff2" crossorigin="anonymous" />
 </svelte:head>
 
-{@render children?.()}
+{@render children()}

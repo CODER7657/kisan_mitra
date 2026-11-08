@@ -58,7 +58,9 @@ export async function openPage(page: Page) {
 
 /** WCAG 2.1 A and AA violations that are serious or critical. */
 export async function seriousA11yViolations(page: Page) {
-	const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+	const results = await new AxeBuilder({ page })
+		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+		.analyze();
 	return results.violations
 		.filter((v) => v.impact === 'serious' || v.impact === 'critical')
 		.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.map((n) => n.target.join(' ')) }));
@@ -79,9 +81,13 @@ export async function expectTouchTargets(page: Page) {
 		const selector = 'button, select, textarea, a[href], label.btn, input:not([type=hidden])';
 		return Array.from(document.querySelectorAll<HTMLElement>(selector))
 			.map((el) => {
-				const target = el instanceof HTMLInputElement && el.type === 'checkbox' ? (el.closest('label') ?? el) : el;
+				const target =
+					el instanceof HTMLInputElement && el.type === 'checkbox'
+						? (el.closest('label') ?? el)
+						: el;
 				const box = target.getBoundingClientRect();
-				const hidden = box.width <= 1 || box.height <= 1 || getComputedStyle(target).visibility === 'hidden';
+				const hidden =
+					box.width <= 1 || box.height <= 1 || getComputedStyle(target).visibility === 'hidden';
 				return { what: target.outerHTML.slice(0, 80), height: box.height, hidden };
 			})
 			.filter((c) => !c.hidden && c.height < 48);

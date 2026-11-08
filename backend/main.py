@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 import openai
@@ -15,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from kisan import answer, config, logs, vision, weather
 from kisan.middleware import RequestContext
+from kisan.vision import Photo
 
 load_dotenv()
 log = logs.setup()
@@ -72,9 +74,11 @@ class RateLimiter:
     a script draining the free LLM quota, not an exact global limit.
     """
 
-    def __init__(self, limit: int, window: float = 60.0, clock=time.monotonic):
+    def __init__(
+        self, limit: int, window: float = 60.0, clock: Callable[[], float] = time.monotonic
+    ) -> None:
         self.limit, self.window, self.clock = limit, window, clock
-        self.hits: dict[str, deque] = defaultdict(deque)
+        self.hits: dict[str, deque[float]] = defaultdict(deque)
 
     def allow(self, key: str) -> bool:
         now = self.clock()
@@ -113,11 +117,14 @@ def store(data: bytes, filename: str, content_type: str) -> str | None:
         # 10 s per attempt; the library retries 502/503/504 a bounded number of times.
         options={"token": s.blob_token, "content_type": content_type, "timeout": 10},
     )
-    return blob["url"]
+    url: str = blob["url"]
+    return url
 
 
-@app.get("/")
-def read_root():
+# response_model=None: the return annotations are for mypy; FastAPI keeps serialising the
+# returned value as is, exactly as before they were added.
+@app.get("/", response_model=None)
+def read_root() -> dict[str, object]:
     """Confirms the server is running, and which parts are configured."""
     p = config.provider()
     return {
@@ -127,20 +134,20 @@ def read_root():
     }
 
 
-@app.get("/health")
-def health():
+@app.get("/health", response_model=None)
+def health() -> dict[str, str]:
     """Liveness, for the host's health check and uptime pings: cheap, no model calls, nothing secret."""
     return {"status": "ok"}
 
 
-@app.head("/health")
-def health_head():
+@app.head("/health", response_model=None)
+def health_head() -> dict[str, str]:
     """The same check for uptime monitors that send HEAD."""
     return health()
 
 
-@app.get("/ready", responses={503: {"description": "A dependency is missing"}})
-def ready():
+@app.get("/ready", response_model=None, responses={503: {"description": "A dependency is missing"}})
+def ready() -> JSONResponse | dict[str, object]:
     """Readiness: a model provider is configured and the photo classifier's files are in
     place (or may be fetched). No model calls, no network; names only, never a secret."""
     checks = {
@@ -153,7 +160,7 @@ def ready():
     return {"status": "ready", "checks": checks}
 
 
-@app.post("/analyze/")
+@app.post("/analyze/", response_model=None)
 async def analyze_farm_data(
     request: Request,
     image_file: UploadFile | None = File(None),
@@ -162,7 +169,7 @@ async def analyze_farm_data(
     language: str | None = Form(None),
     lat: float | None = Form(None),
     lon: float | None = Form(None),
-):
+) -> dict[str, object]:
     """A spoken or typed question, with an optional crop photo and location, answered and checked."""
     if not limiter.allow(client_key(request)):
         raise HTTPException(
@@ -186,17 +193,15 @@ async def analyze_farm_data(
 
     image_type = (
         (image_file.content_type if image_file else None)
-        or mimetypes.guess_type(image_file.filename if image_file else "")[0]
+        or mimetypes.guess_type((image_file.filename if image_file else None) or "")[0]
         or "image/jpeg"
     )
+    image_name = (image_file.filename if image_file else None) or "photo.jpg"
+    audio_name = (audio_file.filename if audio_file else None) or "question.wav"
     try:
-        transcript = (
-            answer.transcribe(p, audio, audio_file.filename or "question.wav", language)
-            if audio
-            else ""
-        )
+        transcript = answer.transcribe(p, audio, audio_name, language) if audio else ""
         full_question = " ".join(x for x in (transcript, question) if x)
-        photo = None
+        photo: Photo | None = None
         if image:
             try:
                 photo = vision.classify(image)
@@ -215,10 +220,8 @@ async def analyze_farm_data(
             forecast,
             (image, image_type) if image else None,
         )
-        image_url = store(image, image_file.filename or "photo.jpg", image_type) if image else None
-        audio_url = (
-            store(audio, audio_file.filename or "question.wav", "audio/wav") if audio else None
-        )
+        image_url = store(image, image_name, image_type) if image else None
+        audio_url = store(audio, audio_name, "audio/wav") if audio else None
     except HTTPException:
         raise
     except openai.RateLimitError as exc:

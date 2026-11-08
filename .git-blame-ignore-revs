@@ -3,3 +3,6 @@
 
 # ruff format of the backend
 591da81da8b552f1e0af3455c24b17ba9df6dd03
+
+# prettier --write of the frontend
+f63aa695b362108008ed5b279c035bd7277cea8d

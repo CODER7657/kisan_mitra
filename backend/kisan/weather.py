@@ -2,15 +2,33 @@
 can account for rain. Returns None on any failure; the answer then says no forecast
 was available."""
 
+from typing import TypedDict
+
 import httpx
 
 URL = "https://api.open-meteo.com/v1/forecast"
 
 
-def forecast(lat: float, lon: float, timeout: float = 6.0) -> dict | None:
+class Day(TypedDict):
+    """One day of the forecast; Open-Meteo sends null for a value it does not have."""
+
+    date: str
+    max_c: float | None
+    min_c: float | None
+    rain_mm: float | None
+    rain_chance_pct: float | None
+    wind_kmh: float | None
+
+
+class Forecast(TypedDict):
+    source: str
+    days: list[Day]
+
+
+def forecast(lat: float, lon: float, timeout: float = 6.0) -> Forecast | None:
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
-    params = {
+    params: dict[str, str | float] = {
         "latitude": round(lat, 3),
         "longitude": round(lon, 3),
         "timezone": "auto",
@@ -24,7 +42,7 @@ def forecast(lat: float, lon: float, timeout: float = 6.0) -> dict | None:
         d = r.json()["daily"]
     except Exception:
         return None
-    days = [
+    days: list[Day] = [
         {
             "date": d["time"][i],
             "max_c": d["temperature_2m_max"][i],

@@ -166,3 +166,37 @@ def test_oversized_photo_is_a_400_not_a_crash(app, monkeypatch):
     assert r.status_code == 400
     assert "photo could not be read" in r.json()["detail"]
     assert "chat" not in app["calls"]
+
+
+@pytest.mark.parametrize(
+    ("model", "extra_body"),
+    [("openai/gpt-oss-20b", {"reasoning_effort": "low"}), ("qwen/qwen3.8-27b", None)],
+)
+def test_only_groq_gpt_oss_gets_low_reasoning_effort(monkeypatch, model, extra_body):
+    from kisan import answer, config
+
+    calls = {}
+    monkeypatch.setattr(config, "client", lambda p: FakeClient("ok", calls))
+    p = config.Provider("groq", "test-not-real", None, model, "whisper-large-v3", False)
+    assert answer.draft(p, "spots on leaves", "en", None, False, None) == "ok"
+    # None is the SDK's default for extra_body: nothing extra goes in the request.
+    assert calls["chat"]["extra_body"] == extra_body
+
+
+@pytest.mark.parametrize(("language", "sent"), [("hi", "hi"), ("xx", None), (None, None)])
+def test_transcribe_sends_only_a_known_language(monkeypatch, language, sent):
+    import openai
+
+    from kisan import answer, config
+
+    calls = {}
+    monkeypatch.setattr(config, "client", lambda p: FakeClient("", calls))
+    p = config.Provider("groq", "test-not-real", None, "m", "whisper-large-v3", False)
+    text = answer.transcribe(p, b"RIFF0000WAVE", "q.wav", language)
+    assert text == "my tomato leaves have black patches"
+    asr = calls["asr"]
+    assert asr["response_format"] == "text" and asr["file"] == ("q.wav", b"RIFF0000WAVE")
+    if sent is None:
+        assert asr["language"] is openai.NOT_GIVEN  # the SDK leaves it out of the request
+    else:
+        assert asr["language"] == sent

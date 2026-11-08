@@ -5,8 +5,10 @@ context the route runs in and is still there when the route logs a warning.
 """
 
 import time
+from typing import TypedDict
 
 import structlog
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from kisan import logs
 
@@ -18,17 +20,23 @@ SECURITY_HEADERS = {
 }
 
 
+class _State(TypedDict):
+    status: int | None
+    started: bool
+    error: bool
+
+
 class RequestContext:
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
         self.log = logs.get_logger()
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        incoming = None
+        incoming: str | None = None
         for name, value in scope.get("headers", []):
             if name == b"x-request-id":
                 incoming = value.decode("latin-1")
@@ -38,9 +46,9 @@ class RequestContext:
         structlog.contextvars.bind_contextvars(request_id=rid)
         start = time.perf_counter()
         # status stays None if no response was ever started (e.g. the client went away).
-        state = {"status": None, "started": False, "error": False}
+        state: _State = {"status": None, "started": False, "error": False}
 
-        async def send_with_headers(message):
+        async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
                 state["status"], state["started"] = message["status"], True
                 headers = [

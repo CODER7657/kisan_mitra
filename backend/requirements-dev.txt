@@ -9,3 +9,6 @@ ruff==0.17.4
 pytest-cov==7.1.0
 pip-audit==2.10.1
 bandit==1.9.4
+# mypy --strict on kisan/ and main.py (backend/mypy.ini); onnxruntime and vercel_blob ship no
+# types and are listed there. No stubs packages needed: every other import is typed.
+mypy==2.4.1

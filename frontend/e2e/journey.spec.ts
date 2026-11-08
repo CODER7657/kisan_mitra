@@ -35,7 +35,9 @@ for (const size of SIZES) {
 		test('initial page is accessible, readable and fits the screen', async ({ page }) => {
 			const mock = await mockNetwork(page, reply);
 			await openPage(page);
-			await expect(page.getByRole('heading', { level: 1, name: 'Ask about your crop.' })).toBeVisible();
+			await expect(
+				page.getByRole('heading', { level: 1, name: 'Ask about your crop.' })
+			).toBeVisible();
 			await page.evaluate(() => document.fonts.ready);
 			expect(await seriousA11yViolations(page)).toEqual([]);
 			await expectNoHorizontalScroll(page);
@@ -101,7 +103,8 @@ test('a backend error is shown in the form, still readable and accessible', asyn
 	await page.route('**/*', (route) => {
 		const url = new URL(route.request().url());
 		if (url.hostname === 'localhost') return route.continue();
-		if (url.pathname.endsWith('/analyze/')) return route.fulfill({ status: 503, body: '<html>busy</html>' });
+		if (url.pathname.endsWith('/analyze/'))
+			return route.fulfill({ status: 503, body: '<html>busy</html>' });
 		return route.fulfill({ json: { status: 'ok' } });
 	});
 	await openPage(page);
@@ -119,7 +122,9 @@ test('no emoji are used as icons', async ({ page }) => {
 	expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
 });
 
-test('a forecast day with no numbers shows a dash and a plain cloud, never "null"', async ({ page }) => {
+test('a forecast day with no numbers shows a dash and a plain cloud, never "null"', async ({
+	page
+}) => {
 	await page.setViewportSize({ width: 375, height: 812 });
 	const gap = answer('2026-11-07', '2026-11-08', '2026-11-09');
 	gap.weather.days[1] = { date: '2026-11-08', rain_mm: null, rain_chance_pct: null } as never;
@@ -131,4 +136,21 @@ test('a forecast day with no numbers shows a dash and a plain cloud, never "null
 	await expect(day.locator('.mm')).toHaveText('–');
 	await expect(day.locator('.pct')).toHaveText('–');
 	await expect(page.locator('.weather')).not.toContainText('null');
+});
+
+test('"Ask another question" works in a browser without speech synthesis', async ({ page }) => {
+	// Some Android WebViews have no Web Speech API; a bare `speechSynthesis` throws there.
+	await page.addInitScript(() => {
+		Reflect.deleteProperty(Object.getPrototypeOf(window) as object, 'speechSynthesis');
+		Reflect.deleteProperty(window, 'speechSynthesis');
+	});
+	const errors: string[] = [];
+	page.on('pageerror', (e) => errors.push(e.message));
+	await mockNetwork(page, reply);
+	await openPage(page);
+	expect(await page.evaluate(() => 'speechSynthesis' in window)).toBe(false);
+	await askInGujarati(page);
+	await page.getByRole('button', { name: 'Ask another question' }).click();
+	await expect(page.getByRole('button', { name: 'Get advice' })).toBeVisible();
+	expect(errors).toEqual([]);
 });
