@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-08
+
 ### Added
 
 - `SECURITY.md` (private reporting, scope), this changelog, `.editorconfig` and weekly
@@ -47,6 +49,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Frontend on SvelteKit 3, adapter-static 4 and vite-plugin-svelte 7, with Vite 8, TypeScript 6
+  and Vitest 5. Configuration moved from `svelte.config.js` into `vite.config.ts`; `$lib`
+  imports became `#lib` subpath imports.
+- `pydantic_core` is no longer pinned on its own; it follows `pydantic`.
 - Backend code formatted with ruff (listed in `.git-blame-ignore-revs`).
 - Dependencies upgraded within their minor versions to clear known vulnerabilities
   (backend: anyio, certifi, dnspython, idna, orjson, Pygments, python-dotenv,
@@ -67,6 +73,8 @@ All notable changes to this project are documented here. The format follows
 
 - "Ask another question" threw a `ReferenceError` in browsers without the Web Speech API
   (found by the new lint); a browser test covers it.
+- Under Vite 8 the production bundle contained the local development API URL; the dev
+  fallback is now chosen at the call site, so a production build never contains it.
 
 - `/health` GET and HEAD no longer share one OpenAPI operation id (FastAPI's duplicate
   operation id warning).
@@ -75,7 +83,10 @@ All notable changes to this project are documented here. The format follows
   "10 gm. mancozeb", "200 मि.ली. दवा", "5 મિ.લી. દવા"): the dot was read as the end of a
   sentence, so the amount and the chemical were checked apart. Hindi and Gujarati unit
   abbreviations (ग्रा., कि.ग्रा., લિ., કિ.ગ્રા.) were not recognised at all. Found by the
-  property tests and code review; a dose split across two sentences is tracked in #40.
+  property tests and code review.
+- A dose split across two sentences ("Mix 2 ml per litre. Use imidacloprid.") got
+  through, because each sentence was checked alone. Neighbouring sentences are now checked
+  as a pair, with seed, water and KVK-referral sentences exempt (#40).
 - When nothing was left of an answer, the guard's notes started with a blank line.
 
 ## [1.0.0] - 2026-11-07
@@ -115,5 +126,6 @@ First public version: a rebuild of the 2025 prototype around measured results.
 - `.gitattributes` storing text with LF; CI with read-only permissions and actions pinned
   by commit SHA.
 
-[Unreleased]: https://github.com/CODER7657/kisan_mitra/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/CODER7657/kisan_mitra/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/CODER7657/kisan_mitra/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/CODER7657/kisan_mitra/releases/tag/v1.0.0
