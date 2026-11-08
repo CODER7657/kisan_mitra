@@ -1,6 +1,6 @@
 """What a hosted deploy relies on: the health route, and CORS read from ALLOWED_ORIGINS.
 
-    cd backend && pytest tests/test_deploy.py
+cd backend && pytest tests/test_deploy.py
 """
 
 import importlib
@@ -14,7 +14,9 @@ SITE = "https://kisan-mitra-gilt.vercel.app"
 
 
 def preflight(client, origin):
-    return client.options("/analyze/", headers={"Origin": origin, "Access-Control-Request-Method": "POST"})
+    return client.options(
+        "/analyze/", headers={"Origin": origin, "Access-Control-Request-Method": "POST"}
+    )
 
 
 @pytest.fixture
@@ -41,18 +43,24 @@ def test_health_does_not_leak_configuration(monkeypatch):
     assert "test-not-real" not in body and "groq" not in body
 
 
-@pytest.mark.parametrize("value, expected", [
-    (None, main.DEV_ORIGINS),
-    ("", main.DEV_ORIGINS),
-    (" , ,", main.DEV_ORIGINS),
-    (f"{SITE}/", main.DEV_ORIGINS + [SITE]),
-    (f"{SITE}, https://b.example.org ,{SITE}", main.DEV_ORIGINS + [SITE, "https://b.example.org"]),
-    ("http://localhost:5173", main.DEV_ORIGINS),
-    (f"{SITE}/some/page?x=1", main.DEV_ORIGINS + [SITE]),
-    ("kisan-mitra-gilt.vercel.app", main.DEV_ORIGINS),
-    ("ftp://files.example.org", main.DEV_ORIGINS),
-    ("*", main.DEV_ORIGINS + ["*"]),
-])
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (None, main.DEV_ORIGINS),
+        ("", main.DEV_ORIGINS),
+        (" , ,", main.DEV_ORIGINS),
+        (f"{SITE}/", main.DEV_ORIGINS + [SITE]),
+        (
+            f"{SITE}, https://b.example.org ,{SITE}",
+            main.DEV_ORIGINS + [SITE, "https://b.example.org"],
+        ),
+        ("http://localhost:5173", main.DEV_ORIGINS),
+        (f"{SITE}/some/page?x=1", main.DEV_ORIGINS + [SITE]),
+        ("kisan-mitra-gilt.vercel.app", main.DEV_ORIGINS),
+        ("ftp://files.example.org", main.DEV_ORIGINS),
+        ("*", main.DEV_ORIGINS + ["*"]),
+    ],
+)
 def test_allowed_origins_parsing(value, expected):
     assert main.allowed_origins(value) == expected
 
@@ -75,7 +83,10 @@ def test_unlisted_site_is_refused(hosted):
     assert r.status_code == 400
     assert "access-control-allow-origin" not in r.headers
     # A plain request still runs, but the browser gets no CORS header and hides the reply.
-    assert "access-control-allow-origin" not in hosted.get("/health", headers={"Origin": "https://evil.example.com"}).headers
+    assert (
+        "access-control-allow-origin"
+        not in hosted.get("/health", headers={"Origin": "https://evil.example.com"}).headers
+    )
 
 
 def test_lookalike_origin_is_refused(hosted):

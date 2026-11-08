@@ -7,6 +7,12 @@
 __pycache__/
 *.pyc
 .venv/
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Photo classifier backbone (fetched by backend/scripts/get_model.py)
 backend/models/*.onnx

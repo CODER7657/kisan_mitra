@@ -1,0 +1,23 @@
+# Lint and format settings for the backend (ruff; version pinned in requirements-dev.txt).
+target-version = "py312"
+line-length = 100
+extend-exclude = ["models"]
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes: unused names, undefined names
+    "I",    # import order
+    "B",    # bugbear: likely bugs
+    "UP",   # pyupgrade, for the target version
+    "SIM",  # simplifications
+    "C4",   # comprehensions
+]
+ignore = [
+    "E501",  # the formatter wraps code; long strings and comments are left alone
+    "B008",  # FastAPI declares parameters with File(...) / Form(...) defaults
+]
+
+[format]
+quote-style = "double"

@@ -2,11 +2,16 @@ import io
 
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from kisan import vision
 
-SPEC = {"size": 224, "resize_short_side": 256, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+SPEC = {
+    "size": 224,
+    "resize_short_side": 256,
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225],
+}
 
 
 def test_labels_read_like_words():
@@ -31,7 +36,9 @@ def test_no_model_means_no_guess(tmp_path, monkeypatch):
 
 
 def test_head_file_round_trips(tmp_path):
-    import base64, hashlib, json
+    import base64
+    import hashlib
+    import json
 
     rng = np.random.default_rng(0)
     q = rng.integers(-127, 128, (3, 4), dtype=np.int8)
@@ -39,8 +46,17 @@ def test_head_file_round_trips(tmp_path):
     b = np.array([0.1, -0.2, 0.3], np.float32)
     blob = base64.b64encode(q.tobytes() + s.tobytes() + b.tobytes()).decode()
     path = tmp_path / "head.json"
-    path.write_text(json.dumps({"classes": ["a", "b", "c"], "dim": 4, "threshold": 0.5, "weights_base64": blob,
-                                "sha256": hashlib.sha256(blob.encode()).hexdigest()}))
+    path.write_text(
+        json.dumps(
+            {
+                "classes": ["a", "b", "c"],
+                "dim": 4,
+                "threshold": 0.5,
+                "weights_base64": blob,
+                "sha256": hashlib.sha256(blob.encode()).hexdigest(),
+            }
+        )
+    )
     head = vision.load_head(path)
     assert np.allclose(head["W"], q * s[:, None]) and np.allclose(head["b"], b)
     path.write_text(path.read_text().replace(blob[:8], "AAAAAAAA"))
@@ -83,5 +99,5 @@ def test_very_large_jpeg_is_decoded_at_reduced_scale():
 
 
 def test_not_an_image_is_an_error():
-    with pytest.raises(Exception):
+    with pytest.raises(UnidentifiedImageError):
         vision.open_photo(b"definitely not a photo")

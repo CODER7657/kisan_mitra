@@ -48,8 +48,12 @@ def allowed_origins(value: str | None) -> list[str]:
     return list(dict.fromkeys(origins))
 
 
-app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(os.getenv("ALLOWED_ORIGINS")),
-                   allow_methods=["GET", "POST"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins(os.getenv("ALLOWED_ORIGINS")),
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
@@ -97,7 +101,11 @@ def store(data: bytes, filename: str, content_type: str) -> str | None:
     from vercel_blob import put
 
     ext = os.path.splitext(filename)[1].lower()[:8]
-    blob = put(f"uploads/{uuid.uuid4().hex}{ext}", data, options={"token": token, "content_type": content_type})
+    blob = put(
+        f"uploads/{uuid.uuid4().hex}{ext}",
+        data,
+        options={"token": token, "content_type": content_type},
+    )
     return blob["url"]
 
 
@@ -105,8 +113,11 @@ def store(data: bytes, filename: str, content_type: str) -> str | None:
 def read_root():
     """Confirms the server is running, and which parts are configured."""
     p = config.provider()
-    return {"message": "Welcome to the Kisan Mitra AI Backend!", "provider": p.name if p else None,
-            "photo_classifier": vision.available()}
+    return {
+        "message": "Welcome to the Kisan Mitra AI Backend!",
+        "provider": p.name if p else None,
+        "photo_classifier": vision.available(),
+    }
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
@@ -127,10 +138,14 @@ async def analyze_farm_data(
 ):
     """A spoken or typed question, with an optional crop photo and location, answered and checked."""
     if not limiter.allow(client_key(request)):
-        raise HTTPException(429, "Too many questions in a minute. Please wait a little and try again.")
+        raise HTTPException(
+            429, "Too many questions in a minute. Please wait a little and try again."
+        )
     p = config.provider()
     if p is None:
-        raise HTTPException(503, "No model provider configured: set GROQ_API_KEY or OPENAI_API_KEY.")
+        raise HTTPException(
+            503, "No model provider configured: set GROQ_API_KEY or OPENAI_API_KEY."
+        )
 
     image = await image_file.read() if image_file else b""
     audio = await audio_file.read() if audio_file else b""
@@ -142,34 +157,56 @@ async def analyze_farm_data(
     if not audio and not question:
         raise HTTPException(400, "Send a voice recording or type a question.")
 
-    image_type = (image_file.content_type if image_file else None) or mimetypes.guess_type(
-        image_file.filename if image_file else "")[0] or "image/jpeg"
+    image_type = (
+        (image_file.content_type if image_file else None)
+        or mimetypes.guess_type(image_file.filename if image_file else "")[0]
+        or "image/jpeg"
+    )
     try:
-        transcript = answer.transcribe(p, audio, audio_file.filename or "question.wav", language) if audio else ""
+        transcript = (
+            answer.transcribe(p, audio, audio_file.filename or "question.wav", language)
+            if audio
+            else ""
+        )
         full_question = " ".join(x for x in (transcript, question) if x)
         photo = None
         if image:
             try:
                 photo = vision.classify(image)
-            except Exception:
+            except Exception as exc:
                 log.exception("photo classifier failed")
-                raise HTTPException(400, "The photo could not be read. Please send a JPG or PNG.")
+                raise HTTPException(
+                    400, "The photo could not be read. Please send a JPG or PNG."
+                ) from exc
         forecast = weather.forecast(lat, lon) if lat is not None and lon is not None else None
-        result = answer.answer(p, full_question, language, photo, bool(image), forecast,
-                               (image, image_type) if image else None)
+        result = answer.answer(
+            p,
+            full_question,
+            language,
+            photo,
+            bool(image),
+            forecast,
+            (image, image_type) if image else None,
+        )
         image_url = store(image, image_file.filename or "photo.jpg", image_type) if image else None
-        audio_url = store(audio, audio_file.filename or "question.wav", "audio/wav") if audio else None
+        audio_url = (
+            store(audio, audio_file.filename or "question.wav", "audio/wav") if audio else None
+        )
     except HTTPException:
         raise
-    except openai.RateLimitError:
+    except openai.RateLimitError as exc:
         log.warning("model provider rate limit")
-        raise HTTPException(503, "The advice service is busy right now. Please try again in a minute.")
-    except (openai.APITimeoutError, openai.APIConnectionError):
+        raise HTTPException(
+            503, "The advice service is busy right now. Please try again in a minute."
+        ) from exc
+    except (openai.APITimeoutError, openai.APIConnectionError) as exc:
         log.warning("model provider timeout or connection error")
-        raise HTTPException(504, "The advice service took too long to answer. Please try again.")
-    except Exception:
+        raise HTTPException(
+            504, "The advice service took too long to answer. Please try again."
+        ) from exc
+    except Exception as exc:
         log.exception("analysis failed")
-        raise HTTPException(500, "Something went wrong while answering. Please try again.")
+        raise HTTPException(500, "Something went wrong while answering. Please try again.") from exc
 
     return {
         "analysis": result["analysis"],
@@ -178,8 +215,15 @@ async def analyze_farm_data(
         "language": result["language"],
         "photo": photo,
         "weather": forecast,
-        "guard": {"lines_removed": len(result["guard"]["removed"]), "kvk_added": result["guard"]["kvk_added"]},
-        "provider": {"name": p.name, "chat_model": p.chat_model, "asr_model": p.asr_model if audio else None},
+        "guard": {
+            "lines_removed": len(result["guard"]["removed"]),
+            "kvk_added": result["guard"]["kvk_added"],
+        },
+        "provider": {
+            "name": p.name,
+            "chat_model": p.chat_model,
+            "asr_model": p.asr_model if audio else None,
+        },
         "image_url": image_url,
         "audio_url": audio_url,
     }

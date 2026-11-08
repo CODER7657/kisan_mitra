@@ -24,7 +24,12 @@ from kisan import model_store
 MODEL_DIR = Path(os.getenv("CROP_MODEL_DIR", Path(__file__).resolve().parent.parent / "models"))
 BACKBONE_FILE = model_store.FILENAME
 HEAD_FILE = "crop_head.json"
-INPUT = {"size": 224, "resize_short_side": 256, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+INPUT = {
+    "size": 224,
+    "resize_short_side": 256,
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225],
+}
 # A small file can decode to a huge image: a 0.45 MB PNG of 12000x12000 took 1.3 GB, past a
 # free host's 512 MB. Normal phone photos (12 MP) are well under this.
 MAX_PIXELS = 30_000_000
@@ -33,7 +38,9 @@ MAX_PIXELS = 30_000_000
 def readable(label: str) -> tuple[str, str]:
     """'Tomato___Late_blight' -> ('Tomato', 'Late blight')."""
     crop, _, condition = label.partition("___")
-    crop = crop.replace("_(maize)", "").replace("_(including_sour)", "").replace(",_bell", " (bell)")
+    crop = (
+        crop.replace("_(maize)", "").replace("_(including_sour)", "").replace(",_bell", " (bell)")
+    )
     condition = condition.replace("_", " ").strip()
     return crop.replace("_", " "), condition[:1].upper() + condition[1:]
 
@@ -46,8 +53,8 @@ def load_head(path: Path) -> dict:
         raise ValueError(f"{path} is corrupt: checksum mismatch")
     raw, k, d = base64.b64decode(blob), len(meta["classes"]), meta["dim"]
     q = np.frombuffer(raw[: k * d], dtype=np.int8).reshape(k, d).astype(np.float32)
-    scale = np.frombuffer(raw[k * d: k * d + 4 * k], dtype=np.float32).reshape(k, 1)
-    bias = np.frombuffer(raw[k * d + 4 * k:], dtype=np.float32)
+    scale = np.frombuffer(raw[k * d : k * d + 4 * k], dtype=np.float32).reshape(k, 1)
+    bias = np.frombuffer(raw[k * d + 4 * k :], dtype=np.float32)
     return {"W": q * scale, "b": bias, "classes": meta["classes"], "threshold": meta["threshold"]}
 
 
@@ -66,8 +73,11 @@ def available() -> bool:
     """True when a photo can be classified: the head is here, and the backbone is or may be fetched."""
     if not (MODEL_DIR / HEAD_FILE).exists():
         return False
-    return ((MODEL_DIR / BACKBONE_FILE).exists() or model_store.fetch_allowed()
-            or (model_store.cache_dir() / BACKBONE_FILE).exists())
+    return (
+        (MODEL_DIR / BACKBONE_FILE).exists()
+        or model_store.fetch_allowed()
+        or (model_store.cache_dir() / BACKBONE_FILE).exists()
+    )
 
 
 def open_photo(image_bytes: bytes) -> Image.Image:
@@ -87,7 +97,9 @@ def preprocess(image: Image.Image, spec: dict = INPUT) -> np.ndarray:
     """Resize the short side, centre-crop and normalise, exactly as in the training notebook."""
     size, short = spec["size"], spec["resize_short_side"]
     image = image.convert("RGB")
-    image.thumbnail((448, 448))  # training photos were stored at most 448 px wide; phone photos are larger
+    image.thumbnail(
+        (448, 448)
+    )  # training photos were stored at most 448 px wide; phone photos are larger
     w, h = image.size
     nw, nh = (short, int(short * h / w)) if w <= h else (int(short * w / h), short)
     image = image.resize((nw, nh), Image.BILINEAR)
@@ -120,8 +132,18 @@ def classify(image_bytes: bytes, top_k: int = 3) -> dict | None:
     guesses = []
     for i in np.argsort(-p)[:top_k]:
         crop, condition = readable(head["classes"][i])
-        guesses.append({"label": head["classes"][i], "crop": crop, "condition": condition,
-                        "probability": round(float(p[i]), 3)})
+        guesses.append(
+            {
+                "label": head["classes"][i],
+                "crop": crop,
+                "condition": condition,
+                "probability": round(float(p[i]), 3),
+            }
+        )
     crops = sorted({readable(c)[0] for c in head["classes"]})
-    return {"guesses": guesses, "confident": guesses[0]["probability"] >= head["threshold"],
-            "threshold": head["threshold"], "crops_covered": crops}
+    return {
+        "guesses": guesses,
+        "confident": guesses[0]["probability"] >= head["threshold"],
+        "threshold": head["threshold"],
+        "crops_covered": crops,
+    }

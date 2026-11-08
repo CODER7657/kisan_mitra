@@ -33,8 +33,19 @@ import main
 from kisan import config, vision
 
 FUZZ_EXAMPLES = int(os.environ.get("FUZZ_EXAMPLES", "25"))
-GUESSES = {"guesses": [{"label": "Tomato___Late_blight", "crop": "Tomato", "condition": "Late blight",
-                        "probability": 0.81}], "confident": True, "threshold": 0.5, "crops_covered": ["Tomato"]}
+GUESSES = {
+    "guesses": [
+        {
+            "label": "Tomato___Late_blight",
+            "crop": "Tomato",
+            "condition": "Late blight",
+            "probability": 0.81,
+        }
+    ],
+    "confident": True,
+    "threshold": 0.5,
+    "crops_covered": ["Tomato"],
+}
 REPLY = "**What to do now**\n- Remove the spotted leaves and keep them away from the field."
 
 
@@ -75,7 +86,9 @@ class _Client:
 
 
 def _ok_chat(**kwargs):
-    return types.SimpleNamespace(choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=REPLY))])
+    return types.SimpleNamespace(
+        choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=REPLY))]
+    )
 
 
 def _ok_transcribe(**kwargs):
@@ -84,7 +97,9 @@ def _ok_transcribe(**kwargs):
 
 _REQUEST = httpx.Request("POST", "https://api.example/v1/chat/completions")
 _FAILURES = [
-    openai.RateLimitError("rate limited", response=httpx.Response(429, request=_REQUEST), body=None),
+    openai.RateLimitError(
+        "rate limited", response=httpx.Response(429, request=_REQUEST), body=None
+    ),
     openai.APITimeoutError(request=_REQUEST),
     openai.APIConnectionError(request=_REQUEST),
 ]
@@ -139,7 +154,11 @@ _FUZZ_SETTINGS = settings(
     max_examples=FUZZ_EXAMPLES,
     deadline=None,
     derandomize=True,
-    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.function_scoped_fixture],
+    suppress_health_check=[
+        HealthCheck.too_slow,
+        HealthCheck.filter_too_much,
+        HealthCheck.function_scoped_fixture,
+    ],
 )
 
 
@@ -157,7 +176,11 @@ def test_no_route_returns_500_when_the_provider_fails(provider_down, case):
 
 def test_the_schema_covers_every_route():
     """Fuzzing an empty schema would pass vacuously."""
-    documented = {(path, method.upper()) for path, item in main.app.openapi()["paths"].items() for method in item}
+    documented = {
+        (path, method.upper())
+        for path, item in main.app.openapi()["paths"].items()
+        for method in item
+    }
     assert {("/", "GET"), ("/health", "GET"), ("/analyze/", "POST")} <= documented
 
 
@@ -199,16 +222,24 @@ def _post(client, form, files):
     return client.post("/analyze/", data=data, files=named or None)
 
 
-@settings(max_examples=max(FUZZ_EXAMPLES, 100), deadline=None, derandomize=True,
-          suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+@settings(
+    max_examples=max(FUZZ_EXAMPLES, 100),
+    deadline=None,
+    derandomize=True,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
+)
 @given(form=forms, files=uploads)
 def test_well_formed_requests_never_500_when_the_provider_answers(provider_up, form, files):
     r = _post(TestClient(main.app), form, files)
     assert r.status_code < 500, r.text[:300]
 
 
-@settings(max_examples=max(FUZZ_EXAMPLES, 100), deadline=None, derandomize=True,
-          suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+@settings(
+    max_examples=max(FUZZ_EXAMPLES, 100),
+    deadline=None,
+    derandomize=True,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
+)
 @given(form=forms, files=uploads)
 def test_well_formed_requests_get_503_or_504_when_the_provider_fails(provider_down, form, files):
     r = _post(TestClient(main.app), form, files)

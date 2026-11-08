@@ -11,7 +11,9 @@ from kisan import config
 
 def rate_limit():
     req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
-    return openai.RateLimitError("rate limited", response=httpx.Response(429, request=req), body=None)
+    return openai.RateLimitError(
+        "rate limited", response=httpx.Response(429, request=req), body=None
+    )
 
 
 def timeout():
@@ -21,11 +23,17 @@ def timeout():
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(main, "limiter", main.RateLimiter(1000))
-    monkeypatch.setattr(main.config, "provider", lambda: config.Provider("groq", "k", "u", "m", "a", sees_images=False))
+    monkeypatch.setattr(
+        main.config,
+        "provider",
+        lambda: config.Provider("groq", "k", "u", "m", "a", sees_images=False),
+    )
     return TestClient(main.app)
 
 
-@pytest.mark.parametrize("error, status, words", [(rate_limit, 503, "busy"), (timeout, 504, "too long")])
+@pytest.mark.parametrize(
+    "error, status, words", [(rate_limit, 503, "busy"), (timeout, 504, "too long")]
+)
 def test_provider_failures_map_to_clear_messages(client, monkeypatch, error, status, words):
     def boom(*a, **k):
         raise error()

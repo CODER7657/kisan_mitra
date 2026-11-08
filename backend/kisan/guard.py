@@ -12,46 +12,174 @@ from dataclasses import dataclass, field
 DIGITS = r"[0-9०-९૦-૯]"  # ASCII, Devanagari and Gujarati digits
 NUMBER = rf"{DIGITS}+(?:[.,]{DIGITS}+)?(?:\s*(?:-|to|से|થી)\s*{DIGITS}+(?:[.,]{DIGITS}+)?)?"
 UNITS = [
-    r"ml", r"m\.l\.?", r"millilit(?:re|er)s?", r"l", r"lit(?:re|er)s?", r"lt", r"ltr", r"g", r"gm", r"gms",
-    r"grams?", r"kg", r"kgs", r"kilo(?:gram)?s?", r"quintals?", r"ppm", r"%", r"cc", r"tablespoons?",
-    r"spoons?", r"bags?", r"packets?", r"bottles?",
-    r"मिली", r"मि\.ली\.?", r"एमएल", r"लीटर", r"ली\.?", r"ग्राम", r"किलो(?:ग्राम)?", r"किग्रा", r"मिलीलीटर",
-    r"चम्मच", r"बोरी", r"थैली",
-    r"મિલી", r"એમએલ", r"લિટર", r"લીટર", r"ગ્રામ", r"કિલો(?:ગ્રામ)?", r"ચમચી", r"થેલી", r"બોરી",
+    r"ml",
+    r"m\.l\.?",
+    r"millilit(?:re|er)s?",
+    r"l",
+    r"lit(?:re|er)s?",
+    r"lt",
+    r"ltr",
+    r"g",
+    r"gm",
+    r"gms",
+    r"grams?",
+    r"kg",
+    r"kgs",
+    r"kilo(?:gram)?s?",
+    r"quintals?",
+    r"ppm",
+    r"%",
+    r"cc",
+    r"tablespoons?",
+    r"spoons?",
+    r"bags?",
+    r"packets?",
+    r"bottles?",
+    r"मिली",
+    r"मि\.ली\.?",
+    r"एमएल",
+    r"लीटर",
+    r"ली\.?",
+    r"ग्राम",
+    r"किलो(?:ग्राम)?",
+    r"किग्रा",
+    r"मिलीलीटर",
+    r"चम्मच",
+    r"बोरी",
+    r"थैली",
+    r"મિલી",
+    r"એમએલ",
+    r"લિટર",
+    r"લીટર",
+    r"ગ્રામ",
+    r"કિલો(?:ગ્રામ)?",
+    r"ચમચી",
+    r"થેલી",
+    r"બોરી",
 ]
 QUANTITY = re.compile(rf"{NUMBER}\s*(?:{'|'.join(UNITS)})(?![a-z])", re.IGNORECASE)
 
 LATIN_CHEMICAL_WORDS = [
-    r"pesticides?", r"insecticides?", r"fungicides?", r"herbicides?", r"weedicides?", r"bactericides?",
-    r"fertili[sz]ers?", r"urea", r"dap", r"mop", r"npk", r"ssp", r"potash", r"sulph?ate", r"chemicals?",
-    r"sprays?", r"spraying", r"dose", r"dosage", r"[a-z]+cides?", r"[a-z]+phos", r"[a-z]+azole", r"[a-z]+thrin",
-    r"imidacloprid", r"mancozeb", r"carbendazim", r"thiamethoxam", r"acephate", r"emamectin", r"metalaxyl",
-    r"copper oxychloride", r"glyphosate", r"chlorantraniliprole", r"spinosad", r"fipronil", r"sulphur",
-    r"sulfur", r"neem oil", r"zineb", r"thiram", r"captan", r"streptocycline",
-    r"dawai", r"dawa", r"khad",  # romanised Hindi
+    r"pesticides?",
+    r"insecticides?",
+    r"fungicides?",
+    r"herbicides?",
+    r"weedicides?",
+    r"bactericides?",
+    r"fertili[sz]ers?",
+    r"urea",
+    r"dap",
+    r"mop",
+    r"npk",
+    r"ssp",
+    r"potash",
+    r"sulph?ate",
+    r"chemicals?",
+    r"sprays?",
+    r"spraying",
+    r"dose",
+    r"dosage",
+    r"[a-z]+cides?",
+    r"[a-z]+phos",
+    r"[a-z]+azole",
+    r"[a-z]+thrin",
+    r"imidacloprid",
+    r"mancozeb",
+    r"carbendazim",
+    r"thiamethoxam",
+    r"acephate",
+    r"emamectin",
+    r"metalaxyl",
+    r"copper oxychloride",
+    r"glyphosate",
+    r"chlorantraniliprole",
+    r"spinosad",
+    r"fipronil",
+    r"sulphur",
+    r"sulfur",
+    r"neem oil",
+    r"zineb",
+    r"thiram",
+    r"captan",
+    r"streptocycline",
+    r"dawai",
+    r"dawa",
+    r"khad",  # romanised Hindi
 ]
 # Hindi and Gujarati words take suffixes (દવાનો, दवाओं), so they match as prefixes, except where a
 # longer word means something else: ખાતરી is "certainty", not ખાતર "fertiliser"; खादी is cloth.
 INDIC_CHEMICAL_WORDS = [
-    r"दवा", r"कीटनाशक", r"फफूंदनाशक", r"खरपतवारनाशक", r"खाद(?!ी)", r"उर्वरक", r"यूरिया", r"डीएपी", r"पोटाश",
-    r"छिड़काव", r"छिडकाव", r"स्प्रे", r"रसायन", r"मैनकोजेब", r"इमिडाक्लोप्रिड",
-    r"દવા", r"જંતુનાશક", r"ફૂગનાશક", r"નીંદણનાશક", r"ખાતર(?!ી)", r"યુરિયા", r"ડીએપી", r"પોટાશ", r"છંટકાવ",
-    r"સ્પ્રે", r"રસાયણ", r"મેન્કોઝેબ",
+    r"दवा",
+    r"कीटनाशक",
+    r"फफूंदनाशक",
+    r"खरपतवारनाशक",
+    r"खाद(?!ी)",
+    r"उर्वरक",
+    r"यूरिया",
+    r"डीएपी",
+    r"पोटाश",
+    r"छिड़काव",
+    r"छिडकाव",
+    r"स्प्रे",
+    r"रसायन",
+    r"मैनकोजेब",
+    r"इमिडाक्लोप्रिड",
+    r"દવા",
+    r"જંતુનાશક",
+    r"ફૂગનાશક",
+    r"નીંદણનાશક",
+    r"ખાતર(?!ી)",
+    r"યુરિયા",
+    r"ડીએપી",
+    r"પોટાશ",
+    r"છંટકાવ",
+    r"સ્પ્રે",
+    r"રસાયણ",
+    r"મેન્કોઝેબ",
 ]
 CHEMICAL = re.compile(
-    r"(?<![a-z])(?:" + "|".join(LATIN_CHEMICAL_WORDS) + r")(?![a-z])|" + "|".join(INDIC_CHEMICAL_WORDS),
+    r"(?<![a-z])(?:"
+    + "|".join(LATIN_CHEMICAL_WORDS)
+    + r")(?![a-z])|"
+    + "|".join(INDIC_CHEMICAL_WORDS),
     re.IGNORECASE,
 )
 
 # Well-known Indian crop-protection brand names. Not complete; the prompt asks for none.
 BRANDS = [
-    "confidor", "admire", "actara", "coragen", "tracer", "ridomil", "dithane", "indofil", "saaf", "bavistin",
-    "roundup", "glycel", "regent", "nuvan", "rogor", "monocil", "hamla", "ulala", "pegasus", "contaf",
-    "blitox", "kavach", "amistar", "nativo", "antracol", "curzate", "proclaim",
+    "confidor",
+    "admire",
+    "actara",
+    "coragen",
+    "tracer",
+    "ridomil",
+    "dithane",
+    "indofil",
+    "saaf",
+    "bavistin",
+    "roundup",
+    "glycel",
+    "regent",
+    "nuvan",
+    "rogor",
+    "monocil",
+    "hamla",
+    "ulala",
+    "pegasus",
+    "contaf",
+    "blitox",
+    "kavach",
+    "amistar",
+    "nativo",
+    "antracol",
+    "curzate",
+    "proclaim",
 ]
 BRAND = re.compile(r"\b(?:" + "|".join(BRANDS) + r")\b", re.IGNORECASE)
 
-KVK = re.compile(r"kvk|krishi vigyan kendra|कृषि विज्ञान केंद्र|कृषि विज्ञान केन्द्र|કૃષિ વિજ્ઞાન કેન્દ્ર", re.IGNORECASE)
+KVK = re.compile(
+    r"kvk|krishi vigyan kendra|कृषि विज्ञान केंद्र|कृषि विज्ञान केन्द्र|કૃષિ વિજ્ઞાન કેન્દ્ર", re.IGNORECASE
+)
 
 SENTENCE_END = re.compile(r"(?<=[.!?।])\s+")
 
@@ -59,17 +187,17 @@ NOTES = {
     "en": {
         "removed": "*Removed {n} line(s) that gave a chemical dose or brand. Kisan Mitra does not give doses.*",
         "kvk": "Before using any chemical, confirm the product and the dose with your local Krishi Vigyan "
-               "Kendra (KVK) or agriculture officer, and read the label.",
+        "Kendra (KVK) or agriculture officer, and read the label.",
     },
     "hi": {
         "removed": "*{n} पंक्ति(याँ) हटाई गईं जिनमें दवा की मात्रा या ब्रांड था। किसान मित्र दवा की मात्रा नहीं बताता।*",
         "kvk": "किसी भी दवा का इस्तेमाल करने से पहले उत्पाद और मात्रा अपने नज़दीकी कृषि विज्ञान केंद्र (KVK) "
-               "या कृषि अधिकारी से पक्का करें, और लेबल पढ़ें।",
+        "या कृषि अधिकारी से पक्का करें, और लेबल पढ़ें।",
     },
     "gu": {
         "removed": "*{n} લીટી દૂર કરી, જેમાં દવાની માત્રા અથવા બ્રાન્ડ હતી. કિસાન મિત્ર દવાની માત્રા આપતું નથી.*",
         "kvk": "કોઈપણ દવા વાપરતા પહેલાં તેનું નામ અને માત્રા તમારા નજીકના કૃષિ વિજ્ઞાન કેન્દ્ર (KVK) અથવા "
-               "ખેતીવાડી અધિકારી પાસેથી નક્કી કરો, અને લેબલ વાંચો.",
+        "ખેતીવાડી અધિકારી પાસેથી નક્કી કરો, અને લેબલ વાંચો.",
     },
 }
 
@@ -120,7 +248,9 @@ def check(answer: str, question: str = "", language: str | None = None) -> Guard
     if removed:
         text += "\n\n" + notes["removed"].format(n=len(removed))
     kvk_added = False
-    if (removed or mentions_chemicals(question) or mentions_chemicals(text)) and not KVK.search(text):
+    if (removed or mentions_chemicals(question) or mentions_chemicals(text)) and not KVK.search(
+        text
+    ):
         text += "\n\n" + notes["kvk"]
         kvk_added = True
     return GuardResult(text=text, removed=removed, kvk_added=kvk_added)

@@ -4,3 +4,8 @@ pytest==8.4.2
 # Contract fuzzing (tests/test_contract_fuzz.py); hypothesis pinned so runs reproduce.
 schemathesis==4.33.1
 hypothesis==6.170.15
+# CI quality and security gates (.github/workflows/backend-tests.yml, scripts/ci-local.sh).
+ruff==0.17.4
+pytest-cov==7.1.0
+pip-audit==2.10.1
+bandit==1.9.4
