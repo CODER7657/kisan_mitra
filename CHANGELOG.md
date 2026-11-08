@@ -26,6 +26,19 @@ All notable changes to this project are documented here. The format follows
   hash mode, so scripts are allowed by hash rather than `unsafe-inline`. A Playwright test
   runs the Gujarati journey under these headers and fails on any CSP violation. The API
   sends `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+- Property-based tests of the dose/brand guard (Hypothesis, 200 derandomised examples per
+  invariant): dose sentences built from the guard's own word lists in English, Hindi and
+  Gujarati are always removed, the guard adds nothing but its notes, a second pass changes
+  nothing, harmless numbers are left alone, and the KVK referral follows its rule.
+- Weekly mutation testing of `kisan/guard.py` with mutmut (`.github/workflows/mutation.yml`,
+  config in `backend/setup.cfg`): survivors are reported, and the job fails only below a
+  90% score (measured: 111 of 111 killed).
+- A k6 performance budget (`perf/k6-health-analyze.js`) for `/health`, `/ready` and
+  `/analyze/`, run against `perf/stub_server.py` (the backend with the model provider
+  stubbed); the script refuses any host but localhost.
+- Lighthouse CI on the production build in the frontend job (`frontend/lighthouserc.json`):
+  mobile Performance, Best Practices and SEO at least 0.90, Accessibility at least 0.95.
+  Reports are kept as a workflow artifact; nothing is uploaded to a Lighthouse server.
 
 ### Changed
 
@@ -50,6 +63,10 @@ All notable changes to this project are documented here. The format follows
 - `/health` GET and HEAD no longer share one OpenAPI operation id (FastAPI's duplicate
   operation id warning).
 - The safety evaluation closes its results file before the CI step that uploads it.
+- The guard let a dose through when the unit was written with a dot ("5 m.l. of
+  imidacloprid", "200 मि.ली. दवा"): the dot was read as the end of a sentence, so the
+  amount and the chemical were checked apart. Found by the property tests.
+- When nothing was left of an answer, the guard's notes started with a blank line.
 
 ## [1.0.0] - 2026-11-07
 
