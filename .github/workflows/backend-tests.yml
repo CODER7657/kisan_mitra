@@ -40,7 +40,7 @@ jobs:
           mapfile -t ignores < <(sed -n 's/^\([A-Z][A-Za-z0-9-]*\).*/--ignore-vuln\n\1/p' pip-audit-ignore.txt)
           pip-audit -r requirements.txt "${ignores[@]}"
       # No keys in CI: the model provider is stubbed in the tests.
-      # The floor is the measured coverage of kisan/ (96.2% on 2026-11-07), rounded down.
+      # The floor: measured coverage of kisan/ was 96.2% on 2026-11-07 (98.0% on 2026-11-08); kept at 96.
       - name: tests with coverage floor
         run: pytest -q --cov=kisan --cov-report=term --cov-fail-under=96
 
