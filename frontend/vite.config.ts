@@ -11,7 +11,11 @@ function requireApiUrl(): Plugin {
 		name: 'kisan-mitra:require-api-url',
 		apply: 'build',
 		configResolved(config) {
-			problem = config.mode === 'production' ? productionProblem(config.env.VITE_API_URL) : null;
+			const url: unknown = config.env.VITE_API_URL;
+			problem =
+				config.mode === 'production'
+					? productionProblem(typeof url === 'string' ? url : undefined)
+					: null;
 		},
 		buildStart() {
 			if (problem) {

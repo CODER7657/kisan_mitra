@@ -46,12 +46,14 @@
 		photo: { guesses: Guess[]; confident: boolean; crops_covered: string[] } | null;
 		weather: {
 			source: string;
-			days: { date: string; rain_mm: number; rain_chance_pct: number }[];
+			// Open-Meteo sends null for a value it does not have; the strip shows a dash.
+			days: { date: string; rain_mm: number | null; rain_chance_pct: number | null }[];
 		} | null;
 		guard: { lines_removed: number; kvk_added: boolean };
 	};
 
-	let imageFile: FileList;
+	// Undefined until the farmer picks a photo (bind:files).
+	let imageFile: FileList | undefined;
 	let question = '';
 	let language = '';
 	let useLocation = false;
@@ -81,7 +83,9 @@
 		}
 	}
 
-	onDestroy(() => ticker && clearInterval(ticker));
+	onDestroy(() => {
+		if (ticker) clearInterval(ticker);
+	});
 
 	async function startRecording() {
 		error = null;
@@ -89,10 +93,14 @@
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 			mediaRecorder = new MediaRecorder(stream);
 			const chunks: BlobPart[] = [];
-			mediaRecorder.ondataavailable = (event) => chunks.push(event.data);
+			mediaRecorder.ondataavailable = (event) => {
+				chunks.push(event.data);
+			};
 			mediaRecorder.onstop = () => {
 				audioBlob = new Blob(chunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
-				stream.getTracks().forEach((t) => t.stop());
+				stream.getTracks().forEach((t) => {
+					t.stop();
+				});
 			};
 			mediaRecorder.start();
 			isRecording = true;
@@ -103,7 +111,7 @@
 			setTimeout(() => {
 				if (recorder.state === 'recording') stopRecording();
 			}, MAX_RECORDING_MS);
-		} catch (err) {
+		} catch {
 			error = 'Could not start recording. Please allow microphone access.';
 		}
 	}
@@ -119,11 +127,20 @@
 	}
 
 	function position(): Promise<GeolocationPosition | null> {
-		return new Promise((resolve) =>
-			navigator.geolocation
-				? navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { timeout: 8000 })
-				: resolve(null)
-		);
+		return new Promise((resolve) => {
+			// Absent outside a secure context (plain http), whatever the DOM types say.
+			if ('geolocation' in navigator) {
+				navigator.geolocation.getCurrentPosition(
+					resolve,
+					() => {
+						resolve(null);
+					},
+					{ timeout: 8000 }
+				);
+			} else {
+				resolve(null);
+			}
+		});
 	}
 
 	// The answer comes from a model, so any HTML in it is shown as text, never run.
@@ -194,11 +211,14 @@
 				// fetch rejects only when the backend can't be reached at all
 				throw new Error('Could not reach the service. Check your connection and try again.');
 			});
-			const data = await readReply(response);
+			// The backend's /analyze/ reply (backend/main.py), checked by the backend's tests.
+			const data = (await readReply(response)) as Result;
 			result = data;
 			analysisHtml = safeMarkdown(data.analysis);
-		} catch (e: any) {
-			if (e?.name !== 'AbortError') error = e.message || 'Something went wrong. Please try again.';
+		} catch (e) {
+			const err = e instanceof Error ? e : null;
+			if (err?.name !== 'AbortError')
+				error = err?.message || 'Something went wrong. Please try again.';
 		} finally {
 			controller = null;
 			isLoading = false;
@@ -214,7 +234,8 @@
 		result = null;
 		audioBlob = null;
 		question = '';
-		speechSynthesis?.cancel();
+		// Not every browser has speech; a bare `speechSynthesis` would throw there.
+		if ('speechSynthesis' in window) speechSynthesis.cancel();
 	}
 </script>
 
@@ -274,6 +295,7 @@
 				</div>
 			{/if}
 			<div class="markdown-content">
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -- safeMarkdown escapes the model's HTML first -->
 				{@html analysisHtml}
 			</div>
 			{#if result.weather}
@@ -283,7 +305,7 @@
 						>Rain forecast <span class="muted">({result.weather.source})</span></span
 					>
 					<ul class="strip">
-						{#each result.weather.days as d}
+						{#each result.weather.days as d (d.date)}
 							{@const sky = skyForDay(d, today)}
 							{@const Icon = SKY_ICON[sky]}
 							<li data-sky={sky}>

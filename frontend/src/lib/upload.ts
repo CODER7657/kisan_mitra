@@ -57,8 +57,8 @@ export async function shrinkPhoto(
 	canvas.height = height;
 	canvas.getContext('2d')?.drawImage(bitmap, 0, 0, width, height);
 	bitmap.close();
-	const blob = await new Promise<Blob | null>((resolve) =>
-		canvas.toBlob(resolve, 'image/jpeg', quality)
-	);
+	const blob = await new Promise<Blob | null>((resolve) => {
+		canvas.toBlob(resolve, 'image/jpeg', quality);
+	});
 	return blob && blob.size < file.size ? blob : file;
 }

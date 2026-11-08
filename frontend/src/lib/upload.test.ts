@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAX_UPLOAD_BYTES, fitWithin, shrinkPhoto, tooLargeMessage } from './upload';
 
 describe('fitWithin', () => {
@@ -31,24 +31,17 @@ describe('tooLargeMessage', () => {
 });
 
 describe('shrinkPhoto', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
 	it('returns the original file when the browser cannot decode images', async () => {
 		const file = new File(['x'], 'leaf.heic', { type: 'image/heic' });
-		const original = (globalThis as any).createImageBitmap;
-		(globalThis as any).createImageBitmap = undefined;
-		try {
-			expect(await shrinkPhoto(file)).toBe(file);
-		} finally {
-			(globalThis as any).createImageBitmap = original;
-		}
+		vi.stubGlobal('createImageBitmap', undefined);
+		expect(await shrinkPhoto(file)).toBe(file);
 	});
 	it('returns the original file when decoding fails', async () => {
 		const file = new File(['not an image'], 'leaf.jpg', { type: 'image/jpeg' });
-		const original = (globalThis as any).createImageBitmap;
-		(globalThis as any).createImageBitmap = () => Promise.reject(new Error('bad image'));
-		try {
-			expect(await shrinkPhoto(file)).toBe(file);
-		} finally {
-			(globalThis as any).createImageBitmap = original;
-		}
+		vi.stubGlobal('createImageBitmap', () => Promise.reject(new Error('bad image')));
+		expect(await shrinkPhoto(file)).toBe(file);
 	});
 });

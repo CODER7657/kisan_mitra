@@ -8,6 +8,11 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+
+	// Read in +page.svelte; required when building for production (see vite.config.ts).
+	interface ImportMetaEnv {
+		readonly VITE_API_URL?: string;
+	}
 }
 
 export {};

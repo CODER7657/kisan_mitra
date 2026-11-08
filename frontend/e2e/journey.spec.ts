@@ -137,3 +137,20 @@ test('a forecast day with no numbers shows a dash and a plain cloud, never "null
 	await expect(day.locator('.pct')).toHaveText('–');
 	await expect(page.locator('.weather')).not.toContainText('null');
 });
+
+test('"Ask another question" works in a browser without speech synthesis', async ({ page }) => {
+	// Some Android WebViews have no Web Speech API; a bare `speechSynthesis` throws there.
+	await page.addInitScript(() => {
+		Reflect.deleteProperty(Object.getPrototypeOf(window) as object, 'speechSynthesis');
+		Reflect.deleteProperty(window, 'speechSynthesis');
+	});
+	const errors: string[] = [];
+	page.on('pageerror', (e) => errors.push(e.message));
+	await mockNetwork(page, reply);
+	await openPage(page);
+	expect(await page.evaluate(() => 'speechSynthesis' in window)).toBe(false);
+	await askInGujarati(page);
+	await page.getByRole('button', { name: 'Ask another question' }).click();
+	await expect(page.getByRole('button', { name: 'Get advice' })).toBeVisible();
+	expect(errors).toEqual([]);
+});

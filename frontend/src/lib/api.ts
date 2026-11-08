@@ -24,15 +24,17 @@ export function productionProblem(url: string | undefined): string | null {
  * The JSON body of a backend reply, or an Error with a message a farmer can act on. A
  * proxy in front of a sleeping or crashed backend answers with HTML, not JSON.
  */
-export async function readReply(response: Response): Promise<any> {
-	let data: any = null;
+export async function readReply(response: Response): Promise<unknown> {
+	let data: unknown = null;
 	try {
 		data = await response.json();
 	} catch {
 		// not JSON
 	}
 	if (response.ok && data) return data;
-	if (data && typeof data.detail === 'string') throw new Error(data.detail);
+	if (typeof data === 'object' && data !== null && 'detail' in data) {
+		if (typeof data.detail === 'string') throw new Error(data.detail);
+	}
 	if (response.status === 413) {
 		throw new Error(
 			'The photo or recording is too large to send. Use a smaller photo or a shorter recording.'

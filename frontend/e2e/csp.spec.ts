@@ -8,13 +8,19 @@ import { answer, GU_QUESTION, mockNetwork, openPage } from './fixtures';
 const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')) as {
 	headers: { source: string; headers: { key: string; value: string }[] }[];
 };
-const HEADERS = Object.fromEntries(
-	vercel.headers
-		.find((h) => h.source === '/(.*)')!
-		.headers.map((h) => [h.key.toLowerCase(), h.value])
-);
+const siteWide = vercel.headers.find((h) => h.source === '/(.*)');
+if (!siteWide) throw new Error("vercel.json has no headers for '/(.*)'");
+const HEADERS = Object.fromEntries(siteWide.headers.map((h) => [h.key.toLowerCase(), h.value]));
 
 type Violation = { directive: string; blocked: string };
+
+// Set in the page by the test: the exposed recorder, and the marker an injected script would set.
+declare global {
+	interface Window {
+		__cspViolation: (v: Violation) => Promise<void>;
+		__injected?: boolean;
+	}
+}
 
 /** Serves the built page with vercel.json's headers and records every CSP violation and console error. */
 async function underVercelHeaders(page: Page) {
@@ -22,7 +28,7 @@ async function underVercelHeaders(page: Page) {
 	await page.exposeFunction('__cspViolation', (v: Violation) => problems.violations.push(v));
 	await page.addInitScript(() => {
 		document.addEventListener('securitypolicyviolation', (e) => {
-			(window as any).__cspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI });
+			void window.__cspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI });
 		});
 	});
 	page.on('console', (msg) => {
@@ -79,7 +85,7 @@ test('the Gujarati journey runs under the production CSP with no violation', asy
 		const s = document.createElement('script');
 		s.textContent = 'window.__injected = true';
 		document.head.append(s);
-		return (window as any).__injected === true;
+		return window.__injected === true;
 	});
 	expect(ran).toBe(false);
 	await expect.poll(() => problems.violations.map((v) => v.directive)).toContain('script-src-elem');
