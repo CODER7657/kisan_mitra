@@ -7,9 +7,9 @@
 	import '@fontsource/noto-sans-gujarati/gujarati-600.css';
 	import '@fontsource/noto-sans-devanagari/devanagari-400.css';
 	import '@fontsource/noto-sans-devanagari/devanagari-600.css';
-	import '$lib/tokens.css';
+	import '#lib/tokens.css';
 	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '#lib/assets/favicon.svg';
 	// Fetch the two fonts every visitor sees first early, so text does not jump when they arrive.
 	import frauncesHeading from '@fontsource/fraunces/files/fraunces-latin-600-normal.woff2?url';
 	import notoBody from '@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2?url';
