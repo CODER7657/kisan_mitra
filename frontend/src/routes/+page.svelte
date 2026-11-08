@@ -4,6 +4,7 @@
 	import { DEV_API_URL, readReply, resolveApiUrl } from '#lib/api.ts';
 	import { formatDuration, loadingMessage } from '#lib/ui.ts';
 	import { MAX_RECORDING_MS, shrinkPhoto, tooLargeMessage } from '#lib/upload.ts';
+	import { NO_VOICE_MESSAGE, speak, type Lang } from '#lib/speech.ts';
 	import { SKY_LABEL, skyForDay, type Sky } from '#lib/weather.ts';
 	import Camera from 'lucide-svelte/icons/camera';
 	import Cloud from 'lucide-svelte/icons/cloud';
@@ -152,12 +153,33 @@
 		return marked(escaped) as string;
 	}
 
-	function readAloud() {
-		if (!result || !('speechSynthesis' in window)) return;
-		const u = new SpeechSynthesisUtterance(result.analysis.replace(/[*#|_>]/g, ''));
-		u.lang = { gu: 'gu-IN', hi: 'hi-IN' }[result.language] ?? 'en-IN';
-		speechSynthesis.cancel();
-		speechSynthesis.speak(u);
+	let speaking = false;
+	let speechNote = '';
+
+	function stopSpeaking() {
+		if ('speechSynthesis' in window) speechSynthesis.cancel();
+		speaking = false;
+	}
+
+	async function readAloud() {
+		if (speaking) {
+			stopSpeaking();
+			return;
+		}
+		speechNote = '';
+		if (!result) return;
+		if (!('speechSynthesis' in window)) {
+			speechNote = 'This browser cannot read text aloud.';
+			return;
+		}
+		const lang: Lang =
+			result.language === 'gu' || result.language === 'hi' ? result.language : 'en';
+		const outcome = await speak(result.analysis, lang, {
+			synth: speechSynthesis,
+			onEnd: () => (speaking = false)
+		});
+		if (outcome === 'speaking') speaking = true;
+		else if (outcome === 'no-voice') speechNote = NO_VOICE_MESSAGE[lang];
 	}
 
 	async function handleSubmit() {
@@ -237,8 +259,9 @@
 		result = null;
 		audioBlob = null;
 		question = '';
+		speechNote = '';
 		// Not every browser has speech; a bare `speechSynthesis` would throw there.
-		if ('speechSynthesis' in window) speechSynthesis.cancel();
+		stopSpeaking();
 	}
 </script>
 
@@ -329,9 +352,12 @@
 					Safety check removed {result.guard.lines_removed} line(s) that gave a chemical dose.
 				</p>
 			{/if}
+			{#if speechNote}
+				<p class="muted small" role="status">{speechNote}</p>
+			{/if}
 			<div class="actions">
-				<button type="button" class="btn" on:click={readAloud}
-					><Volume2 size={22} />Read aloud</button
+				<button type="button" class="btn" on:click={readAloud} aria-pressed={speaking}
+					>{#if speaking}<Square size={22} />Stop reading{:else}<Volume2 size={22} />Read aloud{/if}</button
 				>
 				<button type="button" class="btn secondary" on:click={reset}
 					><RotateCcw size={22} />Ask another question</button
