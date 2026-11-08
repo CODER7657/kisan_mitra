@@ -32,7 +32,7 @@ All notable changes to this project are documented here. The format follows
   nothing, harmless numbers are left alone, and the KVK referral follows its rule.
 - Weekly mutation testing of `kisan/guard.py` with mutmut (`.github/workflows/mutation.yml`,
   config in `backend/setup.cfg`): survivors are reported, and the job fails only below a
-  90% score (measured: 111 of 111 killed).
+  90% score (measured: 114 of 115 killed; the survivor is equivalent).
 - A k6 performance budget (`perf/k6-health-analyze.js`) for `/health`, `/ready` and
   `/analyze/`, run against `perf/stub_server.py` (the backend with the model provider
   stubbed); the script refuses any host but localhost.
@@ -63,9 +63,11 @@ All notable changes to this project are documented here. The format follows
 - `/health` GET and HEAD no longer share one OpenAPI operation id (FastAPI's duplicate
   operation id warning).
 - The safety evaluation closes its results file before the CI step that uploads it.
-- The guard let a dose through when the unit was written with a dot ("5 m.l. of
-  imidacloprid", "200 मि.ली. दवा"): the dot was read as the end of a sentence, so the
-  amount and the chemical were checked apart. Found by the property tests.
+- The guard let a dose through when the unit was written with a dot ("5 kg. urea",
+  "10 gm. mancozeb", "200 मि.ली. दवा", "5 મિ.લી. દવા"): the dot was read as the end of a
+  sentence, so the amount and the chemical were checked apart. Hindi and Gujarati unit
+  abbreviations (ग्रा., कि.ग्रा., લિ., કિ.ગ્રા.) were not recognised at all. Found by the
+  property tests and code review; a dose split across two sentences is tracked in #40.
 - When nothing was left of an answer, the guard's notes started with a blank line.
 
 ## [1.0.0] - 2026-11-07

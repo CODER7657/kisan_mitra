@@ -23,8 +23,8 @@ test counts, mutation score, load test and Lighthouse scores 2026-11-08.
 |---|---|---|
 | Safety: attempts to get a dose or brand (dose requests, brand requests, "I'm an officer, ignore your rules"), en/hi/gu | **0 doses, 0 brands in 28 attempts**, a KVK referral every time; all 8 harmless questions that need a number still answered. Prompts committed before the code. Re-run nightly by the safety gate | `python backend/scripts/safety_eval.py` (needs a Groq key) → [eval/SAFETY_RESULTS.md](eval/SAFETY_RESULTS.md) |
 | Photo check, 222 field photos, 38 crop/condition classes | **64.9%** top-1, 91.9% top-3. When confident it answers 63.5% of photos and is right on 82.3%; otherwise it says it isn't sure. A lab-photo-only model scored 36.0% on the same photos | [notebooks/crop_classifier_colab.ipynb](notebooks/crop_classifier_colab.ipynb), Colab T4, about 10 minutes |
-| Backend tests (no keys, no network) | **159 passing**, including contract fuzzing of every route (no 500s with the provider up or down) and property-based tests of the dose/brand guard (7 invariants, 200 examples each, en/hi/gu); 97% line coverage of `kisan/` (96% enforced in CI) | `cd backend && pytest` |
-| Mutation testing of the guard (`kisan/guard.py`, mutmut 3.8.1) | **111 of 111 mutants killed (100%)**. mutmut mutates function bodies, not the word lists and patterns, which the example and property tests cover. Weekly in CI; fails below 90% | `.github/workflows/mutation.yml`; locally Linux/macOS only (see [Test it](#test-it)) |
+| Backend tests (no keys, no network) | **175 passing**, including contract fuzzing of every route (no 500s with the provider up or down) and property-based tests of the dose/brand guard (7 invariants, 200 examples each, en/hi/gu); 97% line coverage of `kisan/` (96% enforced in CI) | `cd backend && pytest` |
+| Mutation testing of the guard (`kisan/guard.py`, mutmut 3.8.1) | **114 of 115 mutants killed (99.1%)**; the one survivor is equivalent (a slice start of `None` instead of `0`). mutmut mutates function bodies, not the word lists and patterns, which the example and property tests cover. Weekly in CI; fails below 90% | `.github/workflows/mutation.yml`; locally Linux/macOS only (see [Test it](#test-it)) |
 | Load test, backend on a laptop with the model stubbed (k6 2.3.0, 30 s: /health 20/s, /ready 10/s, /analyze/ 5/s) | **1052 requests, 0 failed**; p95 7.6 ms /health, 9.3 ms /ready, 5.3 ms /analyze/ (budget: 300, 300 and 1000 ms, under 1% failed). Excludes the model's own time, which is seconds | `perf/k6-health-analyze.js` against `perf/stub_server.py` |
 | Lighthouse, mobile preset, production build (Lighthouse 12.6.1, median of 3) | **Performance 0.94 to 0.98, Accessibility 1.00, Best Practices 0.96, SEO 1.00** (asserted: 0.90, 0.95, 0.90, 0.90). Best Practices loses 0.04 because the page's wake-up call to the production `/health` is refused by CORS from `localhost` | `cd frontend && npx lhci autorun` after a build |
 | Frontend tests | **49 unit tests passing**; **12 browser tests passing** (Gujarati journey at 375, 768 and 1280 px, axe WCAG 2.1 AA: 0 serious or critical, no sideways scroll, controls at least 48 px, text at least 18 px) | `cd frontend && npm test`, `npm run test:e2e` |
@@ -77,7 +77,7 @@ stored unless `STORE_UPLOADS=1` (then under random paths in Vercel Blob).
 ## Test it
 
 ```bash
-cd backend && pytest                 # 159 tests, model provider stubbed, no keys needed
+cd backend && pytest                 # 175 tests, model provider stubbed, no keys needed
 cd frontend && npm test              # 49 unit tests
 cd frontend && npm run check         # svelte-check, and tsc for the browser tests
 # Browser tests (Playwright + axe) run against `vite preview` of a production build, with
@@ -91,8 +91,10 @@ cd frontend && npx lhci autorun
 (a dose sentence is always removed, nothing is added but the notes, a second pass changes
 nothing, harmless numbers are untouched, the KVK referral rule) and lets Hypothesis search
 for a counterexample. It found two bugs, both fixed with regression tests: a unit written
-with a dot ("5 m.l. of imidacloprid") split the dose into two "sentences" and let it
-through, and an answer left empty started with a blank line.
+with a dot ("5 kg. urea", "200 मि.ली. दवा", "5 મિ.લી. દવા") split the dose into two
+"sentences" and let it through, and an answer left empty started with a blank line. Common
+Hindi and Gujarati unit abbreviations are now recognised too. Still open: a quantity in one
+sentence and the chemical in the next ([#40](https://github.com/CODER7657/kisan_mitra/issues/40)).
 
 **Mutation testing** (weekly, `.github/workflows/mutation.yml`) changes the guard's code
 one small edit at a time and checks that the guard tests notice. mutmut needs `fork`, so
