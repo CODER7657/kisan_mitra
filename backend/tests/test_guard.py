@@ -146,3 +146,44 @@ def test_removed_text_is_an_exact_substring_of_the_answer():
     answer = "Use 5 m.l.  of imidacloprid. Water the field."
     result = guard.check(answer)
     assert result.removed and all(part in answer for part in result.removed)
+
+
+# A dose split across two sentences (#40): the amount in one, the chemical in the next.
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Mix 2 ml per litre. Use imidacloprid.",
+        "Use imidacloprid. Mix 2 ml per litre.",
+        "- Mix 2 ml per litre.\n- Spray mancozeb on the leaves.",
+        "Apply 2 bags per acre. Use urea.",
+        "2 मि.ली. प्रति लीटर मिलाएं। फिर दवा छिड़कें।",
+        "પ્રતિ લિટર 2 મિ.લી. ભેળવો. પછી દવા છાંટો.",
+    ],
+)
+def test_a_dose_split_across_two_sentences_is_removed(answer):
+    result = guard.check(answer)
+    assert len(result.removed) == 2, result.removed
+    assert not any(ch.isdigit() for ch in result.text.split("*")[0]), result.text
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Use 20 kg seed per acre. Treat the seed with a fungicide.",
+        "प्रति एकड़ 20 किलो बीज बोएं। बीज को फफूंदनाशक से उपचारित करें।",
+        "Give each plant 2 litres of water. Avoid spraying pesticide at noon.",
+        "દરેક છોડને 2 લિટર પાણી આપો. બપોરે દવા ન છાંટો.",
+        "Irrigate every 3 days. Ask your KVK about fungicide.",
+        "Keep plants 30 cm apart. Remove the spotted leaves.",
+        "40 kg per acre. Before using any chemical, confirm with your KVK.",
+        "Mix 2 ml per litre.\n\nAsk your KVK which fungicide to use.",
+    ],
+)
+def test_seed_water_spacing_and_kvk_referrals_are_not_paired(answer):
+    assert guard.check(answer).removed == []
+
+
+def test_split_doses_only_pairs_neighbours():
+    sentences = ["Mix 2 ml per litre.", "Water the field.", "Use imidacloprid."]
+    assert guard.split_doses(sentences) == set()
+    assert guard.split_doses(["Mix 2 ml per litre.", "Use imidacloprid."]) == {0, 1}

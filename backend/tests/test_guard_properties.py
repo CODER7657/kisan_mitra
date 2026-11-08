@@ -9,9 +9,9 @@ Gujarati digits. Runs are derandomised, so a failure reproduces on every machine
 The guard works sentence by sentence, so the invariants do too: "no output sentence
 pairs a quantity with a chemical word". Across sentences a pair is allowed by design: a
 seed rate ("40 kg per acre") next to the KVK note ("before using any chemical") is not
-a dose. The flip side, also by design and so not stated as a property: a quantity in one
-sentence and the chemical in the next ("Mix 2 ml per litre. Use mancozeb.") is not
-caught here; the prompt and the nightly live-model safety evaluation cover that case.
+a dose. A quantity in one sentence and the chemical in the next ("Mix 2 ml per litre.
+Use mancozeb.") is caught by `guard.split_doses` (#40), with seed, water and KVK-referral
+sentences exempt; tests/test_guard.py pins those cases with examples.
 """
 
 import re

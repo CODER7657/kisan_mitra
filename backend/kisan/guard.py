@@ -255,6 +255,46 @@ def names_brand(sentence: str) -> bool:
     return bool(BRAND.search(sentence))
 
 
+# A quantity about seed or water is advice, not a dose: "20 kg seed per acre",
+# "2 litres of water per plant". Such a sentence never pairs with a chemical one.
+NOT_A_DOSE = re.compile(
+    r"\bseeds?\b|\bwater(?:ing)?\b|\birrigat\w*|beej|paani|बीज|पानी|सिंचाई|બીજ|પાણી|પિયત",
+    re.IGNORECASE,
+)
+
+
+def _quantity_only(sentence: str) -> bool:
+    return (
+        bool(QUANTITY.search(sentence))
+        and not CHEMICAL.search(sentence)
+        and not NOT_A_DOSE.search(sentence)
+    )
+
+
+def _chemical_only(sentence: str) -> bool:
+    # A KVK referral ("before using any chemical, ask your KVK") is advice, not half a dose.
+    return (
+        bool(CHEMICAL.search(sentence))
+        and not QUANTITY.search(sentence)
+        and not KVK.search(sentence)
+    )
+
+
+def split_doses(sentences: list[str]) -> set[int]:
+    """Indices of neighbouring sentences that give a dose between them (#40).
+
+    "Mix 2 ml per litre. Use imidacloprid." says the same as one dose sentence, so an
+    amount-only sentence next to a chemical-only sentence (either order) is removed as
+    a pair. Seed and water quantities are exempt, so seed rate and watering advice stay.
+    """
+    flagged: set[int] = set()
+    for i in range(len(sentences) - 1):
+        a, b = sentences[i], sentences[i + 1]
+        if (_quantity_only(a) and _chemical_only(b)) or (_chemical_only(a) and _quantity_only(b)):
+            flagged |= {i, i + 1}
+    return flagged
+
+
 def mentions_chemicals(text: str) -> bool:
     return bool(CHEMICAL.search(text))
 
@@ -271,13 +311,27 @@ def check(answer: str, question: str = "", language: str | None = None) -> Guard
     notes = NOTES[lang]
     removed: list[str] = []
     out_lines = []
-    for line in answer.splitlines():
-        sentences = split_sentences(line)
-        kept = [s for s in sentences if not (is_dose(s) or names_brand(s))]
-        removed += [s.strip() for s in sentences if s not in kept]
+    lines = [split_sentences(line) for line in answer.splitlines()]
+    # Sentences in reading order, so a dose split across two list items is still a pair.
+    # A blank line ends a paragraph and breaks the chain.
+    drop: set[tuple[int, int]] = set()
+    run: list[tuple[int, int]] = []
+    for li, sentences in enumerate(lines + [[]]):
+        if not any(s.strip() for s in sentences):
+            texts = [lines[i][j] for i, j in run]
+            drop |= {run[k] for k in split_doses(texts)}
+            run = []
+            continue
+        run += [(li, j) for j, s in enumerate(sentences) if s.strip()]
+    for li, sentences in enumerate(lines):
+        gone = {
+            j for j, s in enumerate(sentences) if is_dose(s) or names_brand(s) or (li, j) in drop
+        }
+        kept = [s for j, s in enumerate(sentences) if j not in gone]
+        removed += [sentences[j].strip() for j in sorted(gone)]
         new = " ".join(kept).rstrip()
         # A line left with only list markers or table pipes after removal is dropped.
-        if len(kept) < len(sentences) and not re.search(r"\w", new):
+        if gone and not re.search(r"\w", new):
             continue
         out_lines.append(new)
     kept_text = "\n".join(out_lines).strip()
