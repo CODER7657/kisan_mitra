@@ -65,7 +65,8 @@ jobs:
         run: "! npm run build > build.log 2>&1 && grep -q 'VITE_API_URL is not set' build.log"
       - run: npm run build
         env:
-          VITE_API_URL: https://kisan-mitra-api.example.org
+          # The production API: e2e/csp.spec.ts checks vercel.json's CSP allows the origin built in.
+          VITE_API_URL: https://kisan-mitra-api.vercel.app
       - name: bundle never calls localhost
         run: "! grep -rq 'localhost:8000' build"
       # Real browser checks against `vite preview` of the build above; the backend is mocked.

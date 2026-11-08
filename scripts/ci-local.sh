@@ -78,8 +78,9 @@ frontend() {
 	fi
 	grep -q 'VITE_API_URL is not set' build.log
 	rm -f build.log
-	step "VITE_API_URL=https://kisan-mitra-api.example.org npm run build"
-	VITE_API_URL=https://kisan-mitra-api.example.org npm run build
+	step "VITE_API_URL=https://kisan-mitra-api.vercel.app npm run build"
+	# The production API: e2e/csp.spec.ts checks that vercel.json's CSP allows it.
+	VITE_API_URL=https://kisan-mitra-api.vercel.app npm run build
 	step "bundle never calls localhost"
 	if grep -rq 'localhost:8000' build; then
 		echo "the build calls localhost:8000" >&2

@@ -7,19 +7,25 @@ revision and checked by sha256, so every copy is the same 24 MB file:
 - on serverless hosts (Vercel), where nothing is fetched at build time: downloaded once per
   instance into a writable cache directory, and only when KISAN_FETCH_MODEL=1.
 
-A download that doesn't match the checksum is deleted and never loaded.
+A download that doesn't match the checksum is deleted and never loaded. The download has a
+connect and read timeout, so a stalled CDN fails the photo check instead of hanging the
+function until the host kills it.
 """
 
 import hashlib
-import os
 import tempfile
-import urllib.request
 from pathlib import Path
+
+import httpx
+
+from kisan import config
 
 REVISION = "8b1f705a3a7f6f062f6bdd21986c1583d3ef105d"
 URL = f"https://huggingface.co/onnx-community/dinov2-small/resolve/{REVISION}/onnx/model_quantized.onnx"
 SHA256 = "c179f8f7f592449c4c1bca4cd124a7538021428c5ffb89afde9503935b197efb"
 FILENAME = "dinov2_small_int8.onnx"
+# 10 s to connect, 30 s between bytes: a 24 MB file from Hugging Face's CDN needs far less.
+TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
 def sha256(path: Path) -> str:
@@ -31,11 +37,20 @@ def sha256(path: Path) -> str:
 
 
 def cache_dir() -> Path:
-    return Path(os.getenv("KISAN_MODEL_CACHE", Path(tempfile.gettempdir()) / "kisan-models"))
+    return Path(config.load().kisan_model_cache or Path(tempfile.gettempdir()) / "kisan-models")
 
 
 def fetch_allowed() -> bool:
-    return os.getenv("KISAN_FETCH_MODEL") == "1"
+    return config.load().kisan_fetch_model == "1"
+
+
+def fetch(url: str, dest: Path, timeout: httpx.Timeout = TIMEOUT) -> None:
+    """Stream url into dest, following the CDN redirect, with connect and read timeouts."""
+    with httpx.stream("GET", url, timeout=timeout, follow_redirects=True) as r:
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in r.iter_bytes(1 << 20):
+                f.write(chunk)
 
 
 def download(dest: Path, url: str | None = None, expected: str | None = None) -> Path:
@@ -43,7 +58,11 @@ def download(dest: Path, url: str | None = None, expected: str | None = None) ->
     url, expected = url or URL, expected or SHA256
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".part")
-    urllib.request.urlretrieve(url, tmp)
+    try:
+        fetch(url, tmp)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     if sha256(tmp) != expected:
         tmp.unlink(missing_ok=True)
         raise ValueError("checksum mismatch: download refused")
