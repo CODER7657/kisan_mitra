@@ -1,6 +1,6 @@
 -r requirements.txt
 # 9.0.3 fixes PYSEC-2026-1845; schemathesis 4 allows <10.
-pytest==9.0.3
+pytest==9.2.0
 # Contract fuzzing (tests/test_contract_fuzz.py); hypothesis pinned so runs reproduce.
 schemathesis==4.33.1
 hypothesis==6.170.15
