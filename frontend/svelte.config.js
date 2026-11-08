@@ -10,7 +10,10 @@ const PRODUCTION_API = 'https://kisan-mitra-api.vercel.app';
 const BUILD = process.argv.includes('build');
 const DEV = !BUILD;
 // Read VITE_API_URL the way Vite does: process env first, then .env, .env.production, ...
-const env = { ...loadEnv(BUILD ? 'production' : 'development', process.cwd(), 'VITE_'), ...process.env };
+const env = {
+	...loadEnv(BUILD ? 'production' : 'development', process.cwd(), 'VITE_'),
+	...process.env
+};
 
 /** The origin (scheme://host[:port]) of a URL, or null when it is not one. */
 function origin(url) {

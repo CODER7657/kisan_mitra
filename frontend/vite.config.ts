@@ -15,7 +15,9 @@ function requireApiUrl(): Plugin {
 		},
 		buildStart() {
 			if (problem) {
-				this.error(`${problem}. Set it to the backend's https URL, e.g. https://kisan-mitra-api.vercel.app`);
+				this.error(
+					`${problem}. Set it to the backend's https URL, e.g. https://kisan-mitra-api.vercel.app`
+				);
 			}
 		}
 	};

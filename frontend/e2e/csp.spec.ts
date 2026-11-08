@@ -9,7 +9,9 @@ const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url
 	headers: { source: string; headers: { key: string; value: string }[] }[];
 };
 const HEADERS = Object.fromEntries(
-	vercel.headers.find((h) => h.source === '/(.*)')!.headers.map((h) => [h.key.toLowerCase(), h.value])
+	vercel.headers
+		.find((h) => h.source === '/(.*)')!
+		.headers.map((h) => [h.key.toLowerCase(), h.value])
 );
 
 type Violation = { directive: string; blocked: string };
@@ -38,7 +40,8 @@ async function underVercelHeaders(page: Page) {
 
 test('connect-src has one source: the built page names the API origin, the header does not', () => {
 	const html = readFileSync(new URL('../build/index.html', import.meta.url), 'utf8');
-	const meta = html.match(/<meta http-equiv="content-security-policy" content="([^"]+)"/)?.[1] ?? '';
+	const meta =
+		html.match(/<meta http-equiv="content-security-policy" content="([^"]+)"/)?.[1] ?? '';
 	const api = meta.match(/connect-src 'self' (\S+);/)?.[1];
 	expect(api, 'the built page has a connect-src with the API origin').toMatch(/^https:\/\//);
 	// Two copies of the origin could disagree (a preview built with another API would be
@@ -54,7 +57,9 @@ test('the Gujarati journey runs under the production CSP with no violation', asy
 	const problems = await underVercelHeaders(page);
 	const response = page.waitForResponse((r) => r.request().resourceType() === 'document');
 	await openPage(page);
-	expect((await response).headers()['content-security-policy']).toBe(HEADERS['content-security-policy']);
+	expect((await response).headers()['content-security-policy']).toBe(
+		HEADERS['content-security-policy']
+	);
 
 	await page.getByRole('combobox', { name: 'Language' }).selectOption('gu');
 	await page.getByRole('textbox', { name: 'Or type it' }).fill(GU_QUESTION);

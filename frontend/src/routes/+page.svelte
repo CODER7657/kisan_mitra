@@ -44,7 +44,10 @@
 		question: string;
 		language: string;
 		photo: { guesses: Guess[]; confident: boolean; crops_covered: string[] } | null;
-		weather: { source: string; days: { date: string; rain_mm: number; rain_chance_pct: number }[] } | null;
+		weather: {
+			source: string;
+			days: { date: string; rain_mm: number; rain_chance_pct: number }[];
+		} | null;
 		guard: { lines_removed: number; kvk_added: boolean };
 	};
 
@@ -163,7 +166,11 @@
 			formData.append('image_file', photo, name);
 		}
 		if (audioBlob) {
-			const ext = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'm4a' : 'webm';
+			const ext = audioBlob.type.includes('ogg')
+				? 'ogg'
+				: audioBlob.type.includes('mp4')
+					? 'm4a'
+					: 'webm';
 			formData.append('audio_file', audioBlob, `question.${ext}`);
 		}
 		if (question.trim()) formData.append('question', question.trim());
@@ -178,7 +185,11 @@
 		controller = new AbortController();
 		const signal = controller.signal;
 		try {
-			const response = await fetch(`${API_URL}/analyze/`, { method: 'POST', body: formData, signal }).catch(() => {
+			const response = await fetch(`${API_URL}/analyze/`, {
+				method: 'POST',
+				body: formData,
+				signal
+			}).catch(() => {
 				if (signal.aborted) throw new DOMException('cancelled', 'AbortError');
 				// fetch rejects only when the backend can't be reached at all
 				throw new Error('Could not reach the service. Check your connection and try again.');
@@ -209,7 +220,10 @@
 
 <svelte:head>
 	<title>Kisan Mitra · Crop advice by voice</title>
-	<meta name="description" content="Ask about your crop by voice or text in Gujarati, Hindi or English. Never gives chemical doses." />
+	<meta
+		name="description"
+		content="Ask about your crop by voice or text in Gujarati, Hindi or English. Never gives chemical doses."
+	/>
 	<!-- The header band's colour (--rust in tokens.css); meta tags cannot read CSS variables. -->
 	<meta name="theme-color" content="#8c2f1d" />
 </svelte:head>
@@ -253,8 +267,9 @@
 						{result.photo.guesses[0].crop}, {result.photo.guesses[0].condition}
 						({Math.round(result.photo.guesses[0].probability * 100)}%). It can be wrong.
 					{:else}
-						Not sure. It only knows {result.photo.crops_covered.length} crops
-						({result.photo.crops_covered.join(', ')}), so the answer relies on your question.
+						Not sure. It only knows {result.photo.crops_covered.length} crops ({result.photo.crops_covered.join(
+							', '
+						)}), so the answer relies on your question.
 					{/if}
 				</div>
 			{/if}
@@ -264,7 +279,9 @@
 			{#if result.weather}
 				{@const today = new Date()}
 				<div class="weather">
-					<span class="label">Rain forecast <span class="muted">({result.weather.source})</span></span>
+					<span class="label"
+						>Rain forecast <span class="muted">({result.weather.source})</span></span
+					>
 					<ul class="strip">
 						{#each result.weather.days as d}
 							{@const sky = skyForDay(d, today)}
@@ -274,18 +291,26 @@
 								<span class="visually-hidden">{SKY_LABEL[sky]}</span>
 								<span class="date">{d.date}</span>
 								<span class="mm">{d.rain_mm == null ? '–' : `${d.rain_mm} mm`}</span>
-								<span class="muted pct">{d.rain_chance_pct == null ? '–' : `${d.rain_chance_pct}%`}</span>
+								<span class="muted pct"
+									>{d.rain_chance_pct == null ? '–' : `${d.rain_chance_pct}%`}</span
+								>
 							</li>
 						{/each}
 					</ul>
 				</div>
 			{/if}
 			{#if result.guard.lines_removed > 0}
-				<p class="muted small">Safety check removed {result.guard.lines_removed} line(s) that gave a chemical dose.</p>
+				<p class="muted small">
+					Safety check removed {result.guard.lines_removed} line(s) that gave a chemical dose.
+				</p>
 			{/if}
 			<div class="actions">
-				<button type="button" class="btn" on:click={readAloud}><Volume2 size={22} />Read aloud</button>
-				<button type="button" class="btn secondary" on:click={reset}><RotateCcw size={22} />Ask another question</button>
+				<button type="button" class="btn" on:click={readAloud}
+					><Volume2 size={22} />Read aloud</button
+				>
+				<button type="button" class="btn secondary" on:click={reset}
+					><RotateCcw size={22} />Ask another question</button
+				>
 			</div>
 		</section>
 	{:else}
@@ -301,7 +326,9 @@
 						<button type="button" class="btn rec on" on:click={stopRecording}>
 							<Square class="rec-icon" size={20} />Stop recording
 						</button>
-						<span class="status" aria-live="polite">Recording {formatDuration(now - recordStart)}</span>
+						<span class="status" aria-live="polite"
+							>Recording {formatDuration(now - recordStart)}</span
+						>
 					{:else}
 						<button type="button" class="btn rec" on:click={startRecording}>
 							<Mic class="rec-icon" size={22} />{audioBlob ? 'Record again' : 'Speak your question'}
@@ -314,17 +341,31 @@
 				</div>
 				<label class="field">
 					<span>Or type it</span>
-					<textarea bind:value={question} rows="3" placeholder="For example: the cotton leaves have turned yellow at the edges"></textarea>
+					<textarea
+						bind:value={question}
+						rows="3"
+						placeholder="For example: the cotton leaves have turned yellow at the edges"></textarea>
 				</label>
 			</fieldset>
 
 			<hr class="sep" />
 
 			<fieldset class="step">
-				<legend><span class="num">2</span>Photo of the crop <span class="muted">(optional)</span></legend>
-				<input type="file" id="image" class="visually-hidden" accept="image/*" capture="environment" bind:files={imageFile} />
+				<legend
+					><span class="num">2</span>Photo of the crop <span class="muted">(optional)</span></legend
+				>
+				<input
+					type="file"
+					id="image"
+					class="visually-hidden"
+					accept="image/*"
+					capture="environment"
+					bind:files={imageFile}
+				/>
 				<div class="photo-row">
-					<label for="image" class="btn secondary"><Camera size={22} />{imageFile?.[0] ? 'Change photo' : 'Take or choose photo'}</label>
+					<label for="image" class="btn secondary"
+						><Camera size={22} />{imageFile?.[0] ? 'Change photo' : 'Take or choose photo'}</label
+					>
 					<span class="status">{imageFile?.[0]?.name || 'No photo'}</span>
 				</div>
 			</fieldset>
@@ -358,7 +399,10 @@
 </main>
 
 <footer class="foot">
-	<p>Advice is generated by AI and checked by fixed safety rules. It can be wrong; for anything serious, ask your KVK.</p>
+	<p>
+		Advice is generated by AI and checked by fixed safety rules. It can be wrong; for anything
+		serious, ask your KVK.
+	</p>
 </footer>
 
 <style>

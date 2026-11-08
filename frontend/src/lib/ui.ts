@@ -14,6 +14,7 @@ export function formatDuration(ms: number): string {
  */
 export function loadingMessage(elapsedMs: number): string {
 	if (!(elapsedMs >= 8_000)) return 'Preparing your answer.';
-	if (elapsedMs < 25_000) return 'Still working. Checking the photo, the weather and the safety rules.';
+	if (elapsedMs < 25_000)
+		return 'Still working. Checking the photo, the weather and the safety rules.';
 	return 'This is taking longer than usual. You can keep waiting, or go back and try again.';
 }

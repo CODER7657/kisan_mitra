@@ -24,9 +24,12 @@ describe('productionProblem', () => {
 		expect(productionProblem('http://kisan-mitra-api.onrender.com')).toMatch(/https/);
 	});
 
-	it.each(['onrender.com', 'not a url', 'ftp://example.com'])('rejects a malformed URL (%s)', (url) => {
-		expect(productionProblem(url)).not.toBeNull();
-	});
+	it.each(['onrender.com', 'not a url', 'ftp://example.com'])(
+		'rejects a malformed URL (%s)',
+		(url) => {
+			expect(productionProblem(url)).not.toBeNull();
+		}
+	);
 });
 
 describe('resolveApiUrl', () => {
@@ -54,19 +57,21 @@ describe('readReply', () => {
 	});
 
 	it("passes the backend's own error message through", async () => {
-		await expect(readReply(reply(400, '{"detail":"Send a voice recording or type a question."}'))).rejects.toThrow(
-			'Send a voice recording or type a question.'
-		);
+		await expect(
+			readReply(reply(400, '{"detail":"Send a voice recording or type a question."}'))
+		).rejects.toThrow('Send a voice recording or type a question.');
 	});
 
 	it('explains an HTML 502 from a sleeping backend instead of a JSON parse error', async () => {
-		await expect(readReply(reply(502, '<html>Bad Gateway</html>', 'text/html'))).rejects.toThrow(/starting up/);
+		await expect(readReply(reply(502, '<html>Bad Gateway</html>', 'text/html'))).rejects.toThrow(
+			/starting up/
+		);
 	});
 
 	it("explains the host's HTML 413 for an upload that is too large", async () => {
-		await expect(readReply(new Response('<html>Request Entity Too Large</html>', { status: 413 }))).rejects.toThrow(
-			'too large to send'
-		);
+		await expect(
+			readReply(new Response('<html>Request Entity Too Large</html>', { status: 413 }))
+		).rejects.toThrow('too large to send');
 	});
 	it('gives a plain message for other non-JSON failures', async () => {
 		await expect(readReply(reply(500, 'oops', 'text/plain'))).rejects.toThrow('HTTP 500');
