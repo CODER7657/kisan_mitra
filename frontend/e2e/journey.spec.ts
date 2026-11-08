@@ -154,3 +154,77 @@ test('"Ask another question" works in a browser without speech synthesis', async
 	await expect(page.getByRole('button', { name: 'Get advice' })).toBeVisible();
 	expect(errors).toEqual([]);
 });
+
+/** A stand-in speech engine with the given voices; utterances land in window.__spoken. */
+async function fakeSpeech(page: Page, voices: { lang: string; name: string }[]) {
+	await page.addInitScript((list) => {
+		class Utterance {
+			text: string;
+			voice: unknown = null;
+			lang = '';
+			onend: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			constructor(text: string) {
+				this.text = text;
+			}
+		}
+		const w = window as unknown as Record<string, unknown>;
+		const spoken: Utterance[] = [];
+		w.__spoken = spoken;
+		w.__cancels = 0;
+		w.SpeechSynthesisUtterance = Utterance;
+		Object.defineProperty(window, 'speechSynthesis', {
+			configurable: true,
+			value: {
+				speaking: false,
+				pending: false,
+				getVoices: () => list.map((v) => ({ ...v, localService: true })),
+				cancel: () => {
+					w.__cancels = (w.__cancels as number) + 1;
+				},
+				speak: (u: Utterance) => spoken.push(u),
+				addEventListener: () => undefined,
+				removeEventListener: () => undefined
+			}
+		});
+	}, voices);
+}
+
+test('Read aloud speaks a Gujarati answer with a Gujarati voice, in chunks, and can stop', async ({
+	page
+}) => {
+	await fakeSpeech(page, [
+		{ lang: 'en-US', name: 'English' },
+		{ lang: 'gu-IN', name: 'Gujarati' }
+	]);
+	await mockNetwork(page, reply);
+	await openPage(page);
+	await askInGujarati(page);
+	await page.getByRole('button', { name: 'Read aloud' }).click();
+	await expect(page.getByRole('button', { name: 'Stop reading' })).toBeVisible();
+	// Utterances are queued one tick after cancel() (the Chrome workaround), so poll.
+	const read = () =>
+		page.evaluate(() =>
+			(window as unknown as { __spoken: { text: string; lang: string }[] }).__spoken.map((u) => ({
+				lang: u.lang,
+				len: u.text.length
+			}))
+		);
+	await expect.poll(async () => (await read()).length).toBeGreaterThan(0);
+	const spoken = await read();
+	expect(spoken.every((u) => u.lang === 'gu-IN' && u.len > 0 && u.len <= 180)).toBe(true);
+	await page.getByRole('button', { name: 'Stop reading' }).click();
+	await expect(page.getByRole('button', { name: 'Read aloud' })).toBeVisible();
+});
+
+test('Read aloud explains when the device has no voice for the language', async ({ page }) => {
+	await fakeSpeech(page, [{ lang: 'en-US', name: 'English' }]);
+	await mockNetwork(page, reply);
+	await openPage(page);
+	await askInGujarati(page);
+	await page.getByRole('button', { name: 'Read aloud' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'no Gujarati voice' })).toBeVisible();
+	expect(
+		await page.evaluate(() => (window as unknown as { __spoken: unknown[] }).__spoken)
+	).toEqual([]);
+});
