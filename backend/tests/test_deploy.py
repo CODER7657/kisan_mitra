@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from kisan import config
 
 SITE = "https://kisan-mitra-gilt.vercel.app"
 
@@ -23,8 +24,10 @@ def preflight(client, origin):
 def hosted(monkeypatch):
     """main rebuilt as the host would start it, with ALLOWED_ORIGINS set; restored afterwards."""
     monkeypatch.setenv("ALLOWED_ORIGINS", f" {SITE}/ , https://other.example.org,,")
+    config.get_settings.cache_clear()
     yield TestClient(importlib.reload(main).app)
     monkeypatch.undo()  # put the environment back first, so main is rebuilt from it
+    config.get_settings.cache_clear()
     importlib.reload(main)
 
 

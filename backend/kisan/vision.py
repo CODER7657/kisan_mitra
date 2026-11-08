@@ -12,16 +12,15 @@ import base64
 import hashlib
 import io
 import json
-import os
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from kisan import model_store
+from kisan import config, model_store
 
-MODEL_DIR = Path(os.getenv("CROP_MODEL_DIR", Path(__file__).resolve().parent.parent / "models"))
+MODEL_DIR = Path(config.load().crop_model_dir or Path(__file__).resolve().parent.parent / "models")
 BACKBONE_FILE = model_store.FILENAME
 HEAD_FILE = "crop_head.json"
 INPUT = {

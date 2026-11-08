@@ -1,6 +1,5 @@
 # main.py
 
-import logging
 import mimetypes
 import os
 import time
@@ -12,11 +11,15 @@ import openai
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from kisan import answer, config, vision, weather
+from kisan import answer, config, logs, vision, weather
+from kisan.middleware import RequestContext
 
 load_dotenv()
-log = logging.getLogger("kisan_mitra")
+log = logs.setup()
+# Read and checked once, now: a bad value stops the app here with the variable's name.
+settings = config.get_settings()
 
 app = FastAPI(title="Kisan Mitra AI Backend")
 
@@ -50,10 +53,13 @@ def allowed_origins(value: str | None) -> list[str]:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins(os.getenv("ALLOWED_ORIGINS")),
+    allow_origins=allowed_origins(settings.allowed_origins),
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    expose_headers=[logs.REQUEST_ID_HEADER],
 )
+# Added last, so it wraps CORS: preflights and refusals get a request id too.
+app.add_middleware(RequestContext)
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
@@ -84,7 +90,7 @@ class RateLimiter:
         return True
 
 
-limiter = RateLimiter(int(os.getenv("RATE_LIMIT_PER_MIN", "12")))
+limiter = RateLimiter(settings.rate_limit_per_min)
 
 
 def client_key(request: Request) -> str:
@@ -95,8 +101,8 @@ def client_key(request: Request) -> str:
 
 def store(data: bytes, filename: str, content_type: str) -> str | None:
     """Optionally keep uploads in Vercel Blob, under a random path. Off unless STORE_UPLOADS=1."""
-    token = os.getenv("BLOB_READ_WRITE_TOKEN")
-    if os.getenv("STORE_UPLOADS") != "1" or not token:
+    s = config.load()
+    if not s.uploads_enabled:
         return None
     from vercel_blob import put
 
@@ -104,7 +110,8 @@ def store(data: bytes, filename: str, content_type: str) -> str | None:
     blob = put(
         f"uploads/{uuid.uuid4().hex}{ext}",
         data,
-        options={"token": token, "content_type": content_type},
+        # 10 s per attempt; the library retries 502/503/504 a bounded number of times.
+        options={"token": s.blob_token, "content_type": content_type, "timeout": 10},
     )
     return blob["url"]
 
@@ -120,10 +127,30 @@ def read_root():
     }
 
 
-@app.api_route("/health", methods=["GET", "HEAD"])
+@app.get("/health")
 def health():
-    """For the host's health check and uptime pings: cheap, no model calls, nothing secret."""
+    """Liveness, for the host's health check and uptime pings: cheap, no model calls, nothing secret."""
     return {"status": "ok"}
+
+
+@app.head("/health")
+def health_head():
+    """The same check for uptime monitors that send HEAD."""
+    return {"status": "ok"}
+
+
+@app.get("/ready", responses={503: {"description": "A dependency is missing"}})
+def ready():
+    """Readiness: a model provider is configured and the photo classifier's files are in
+    place (or may be fetched). No model calls, no network; names only, never a secret."""
+    checks = {
+        "model_provider": config.provider() is not None,
+        "photo_classifier": vision.available(),
+    }
+    missing = [name for name, ok in checks.items() if not ok]
+    if missing:
+        return JSONResponse({"status": "not ready", "missing": missing, "checks": checks}, 503)
+    return {"status": "ready", "checks": checks}
 
 
 @app.post("/analyze/")

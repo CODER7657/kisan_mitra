@@ -1,14 +1,35 @@
 """The backbone is loaded only from a known file: bundled, cached and verified, or freshly
 downloaded and verified. Nothing touches the network unless KISAN_FETCH_MODEL=1."""
 
+import contextlib
 import hashlib
+import types
 
+import httpx
 import pytest
 
 from kisan import model_store, vision
 
 GOOD = b"pretend onnx bytes"
 GOOD_SHA = hashlib.sha256(GOOD).hexdigest()
+
+
+class FakeResponse(contextlib.AbstractContextManager):
+    """What httpx.stream yields: a status check and the body in chunks."""
+
+    def __init__(self, payload, error=None):
+        self.payload, self.error = payload, error
+
+    def __exit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        if self.error:
+            raise self.error
+
+    def iter_bytes(self, size):
+        yield self.payload[:5]
+        yield self.payload[5:]
 
 
 @pytest.fixture
@@ -18,13 +39,14 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(model_store, "SHA256", GOOD_SHA)
     calls = []
 
-    def fake_retrieve(url, dest):
+    def fake_stream(method, url, **kw):
         calls.append(url)
-        with open(dest, "wb") as f:
-            f.write(fake_retrieve.payload)
+        fake_retrieve.kwargs = kw
+        return FakeResponse(fake_retrieve.payload)
 
-    fake_retrieve.payload = GOOD
-    monkeypatch.setattr(model_store.urllib.request, "urlretrieve", fake_retrieve)
+    # The payload to serve, and the keyword arguments of the last download.
+    fake_retrieve = types.SimpleNamespace(payload=GOOD, kwargs=None)
+    monkeypatch.setattr(model_store.httpx, "stream", fake_stream)
     return tmp_path, calls, fake_retrieve
 
 
@@ -79,3 +101,43 @@ def test_vision_is_available_when_it_may_fetch(tmp_path, monkeypatch):
     assert not vision.available()  # head but no backbone, fetching off
     monkeypatch.setenv("KISAN_FETCH_MODEL", "1")
     assert vision.available()
+
+
+def test_download_has_connect_and_read_timeouts_and_follows_the_cdn_redirect(store, monkeypatch):
+    tmp, calls, fake = store
+    monkeypatch.setenv("KISAN_FETCH_MODEL", "1")
+    model_store.backbone_path(tmp / "models")
+    timeout = fake.kwargs["timeout"]
+    assert isinstance(timeout, httpx.Timeout)
+    assert timeout.connect == 10.0 and timeout.read == 30.0
+    assert fake.kwargs["follow_redirects"] is True
+
+
+def test_failed_download_leaves_no_partial_file(store, monkeypatch):
+    tmp, calls, _ = store
+    monkeypatch.setenv("KISAN_FETCH_MODEL", "1")
+
+    def stalled(method, url, **kw):
+        raise httpx.ReadTimeout("no bytes for 30 s")
+
+    monkeypatch.setattr(model_store.httpx, "stream", stalled)
+    with pytest.raises(httpx.ReadTimeout):
+        model_store.backbone_path(tmp / "models")
+    assert not any((tmp / "cache").glob("*"))
+
+
+def test_http_error_is_raised_not_cached(store, monkeypatch):
+    tmp, calls, _ = store
+    monkeypatch.setenv("KISAN_FETCH_MODEL", "1")
+    error = httpx.HTTPStatusError(
+        "404", request=httpx.Request("GET", "u"), response=httpx.Response(404)
+    )
+    monkeypatch.setattr(model_store.httpx, "stream", lambda m, u, **kw: FakeResponse(b"", error))
+    with pytest.raises(httpx.HTTPStatusError):
+        model_store.backbone_path(tmp / "models")
+    assert not any((tmp / "cache").glob("*"))
+
+
+def test_empty_cache_variable_falls_back_to_the_temp_dir(monkeypatch):
+    monkeypatch.setenv("KISAN_MODEL_CACHE", "")
+    assert model_store.cache_dir().name == "kisan-models"
