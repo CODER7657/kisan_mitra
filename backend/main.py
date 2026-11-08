@@ -136,7 +136,7 @@ def health():
 @app.head("/health")
 def health_head():
     """The same check for uptime monitors that send HEAD."""
-    return {"status": "ok"}
+    return health()
 
 
 @app.get("/ready", responses={503: {"description": "A dependency is missing"}})

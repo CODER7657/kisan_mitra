@@ -57,6 +57,8 @@ def setup(stream=None) -> logging.Logger:
     )
     log = logging.getLogger(LOGGER)
     log.setLevel(logging.INFO)
+    # JSON only: a host that installs a root handler would otherwise print every line twice.
+    log.propagate = False
     if not any(getattr(h, "_kisan_json", False) for h in log.handlers):
         handler = logging.StreamHandler(stream or sys.stdout)
         handler.setFormatter(formatter())

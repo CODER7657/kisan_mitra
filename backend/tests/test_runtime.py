@@ -338,7 +338,7 @@ def test_not_ready_names_what_is_missing(monkeypatch, no_keys, key, classifier, 
 
 
 def test_ready_with_the_real_bundled_classifier_files(monkeypatch, no_keys):
-    if not (vision.MODEL_DIR / vision.BACKBONE_FILE).exists():
+    if not (vision.model_dir() / vision.BACKBONE_FILE).exists():
         pytest.skip("backbone not downloaded (scripts/get_model.py)")
     monkeypatch.setenv("OPENAI_API_KEY", "test-not-real")
     assert TestClient(main.app).get("/ready").status_code == 200
@@ -353,3 +353,93 @@ def test_schema_has_no_duplicate_operation_ids():
     ids = [op["operationId"] for item in schema["paths"].values() for op in item.values()]
     assert len(ids) == len(set(ids))
     assert {"get", "head"} <= set(schema["paths"]["/health"]) and "get" in schema["paths"]["/ready"]
+
+
+def test_importing_the_classifier_does_not_validate_unrelated_settings(monkeypatch):
+    """A bad RATE_LIMIT_PER_MIN must not break `import kisan.vision` (training, eval, Docker)."""
+    import importlib
+
+    from kisan import config, vision
+
+    monkeypatch.setenv("RATE_LIMIT_PER_MIN", "0")
+    config.get_settings.cache_clear() if hasattr(config, "get_settings") else None
+    importlib.reload(vision)
+    assert vision.MODEL_DIR is None
+
+
+def test_crop_model_dir_is_read_when_used(monkeypatch, tmp_path):
+    from kisan import vision
+
+    monkeypatch.setattr(vision, "MODEL_DIR", None)
+    monkeypatch.setenv("CROP_MODEL_DIR", str(tmp_path))
+    assert vision.model_dir() == tmp_path
+
+
+def test_llm_provider_is_normalised_and_typos_rejected(monkeypatch):
+    import pytest
+
+    from kisan import config
+
+    monkeypatch.setenv("LLM_PROVIDER", " OpenAI ")
+    assert config.load().llm_provider == "openai"
+    monkeypatch.setenv("LLM_PROVIDER", "opneai")
+    with pytest.raises(Exception, match="LLM_PROVIDER"):
+        config.load()
+
+
+def test_health_head_matches_get():
+    from fastapi.testclient import TestClient
+
+    import main
+
+    client = TestClient(main.app)
+    assert client.head("/health").status_code == client.get("/health").status_code == 200
+
+
+def test_access_log_flags_errors_after_headers_and_never_invents_a_500():
+    import asyncio
+    import contextlib
+    import json
+    import logging
+
+    from kisan import logs, middleware
+
+    records = []
+
+    class Capture(logging.Handler):
+        def emit(self, record):
+            records.append(self.format(record))
+
+    handler = Capture()
+    handler.setFormatter(logs.formatter())
+    logging.getLogger(logs.LOGGER).addHandler(handler)
+    try:
+
+        async def fails_after_start(scope, receive, send):
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            raise RuntimeError("boom after headers")
+
+        async def never_answers(scope, receive, send):
+            return None
+
+        async def run(app):
+            sent = []
+
+            async def send(message):
+                sent.append(message)
+
+            scope = {"type": "http", "method": "GET", "path": "/x", "headers": []}
+            mw = middleware.RequestContext(app) if hasattr(middleware, "RequestContext") else None
+            assert mw is not None
+            with contextlib.suppress(RuntimeError):
+                await mw(scope, None, send)
+            return sent
+
+        asyncio.run(run(fails_after_start))
+        asyncio.run(run(never_answers))
+    finally:
+        logging.getLogger(logs.LOGGER).removeHandler(handler)
+
+    lines = [json.loads(r) for r in records if '"request"' in r]
+    assert lines[0]["status"] == 200 and lines[0]["error"] is True
+    assert lines[1]["status"] is None and "error" not in lines[1]

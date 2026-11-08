@@ -37,7 +37,8 @@ class RequestContext:
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=rid)
         start = time.perf_counter()
-        state = {"status": 500, "started": False}
+        # status stays None if no response was ever started (e.g. the client went away).
+        state = {"status": None, "started": False, "error": False}
 
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
@@ -57,7 +58,9 @@ class RequestContext:
             await self.app(scope, receive, send_with_headers)
         except Exception:
             # Unhandled: answer 500 ourselves so the reply still carries the request id,
-            # then re-raise so the server logs the traceback.
+            # then re-raise so the server logs the traceback. If headers already went out,
+            # the logged status is what the client got, flagged as an error.
+            state["error"] = True
             if not state["started"]:
                 await send_with_headers(
                     {
@@ -77,5 +80,6 @@ class RequestContext:
                 path=scope.get("path"),
                 status=state["status"],
                 duration_ms=round((time.perf_counter() - start) * 1000, 1),
+                **({"error": True} if state["error"] else {}),
             )
             structlog.contextvars.clear_contextvars()

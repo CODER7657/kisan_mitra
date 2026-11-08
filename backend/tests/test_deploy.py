@@ -4,6 +4,7 @@ cd backend && pytest tests/test_deploy.py
 """
 
 import importlib
+import logging
 
 import pytest
 from fastapi.testclient import TestClient
@@ -69,7 +70,13 @@ def test_allowed_origins_parsing(value, expected):
 
 
 def test_bad_origin_entries_are_logged(caplog):
-    main.allowed_origins(f"kisan-mitra-gilt.vercel.app, {SITE}/app")
+    # The app logger does not propagate to root (JSON only), so listen on it directly.
+    app_log = logging.getLogger("kisan_mitra")
+    app_log.addHandler(caplog.handler)
+    try:
+        main.allowed_origins(f"kisan-mitra-gilt.vercel.app, {SITE}/app")
+    finally:
+        app_log.removeHandler(caplog.handler)
     assert "ignoring 'kisan-mitra-gilt.vercel.app'" in caplog.text
     assert f"using '{SITE}'" in caplog.text
 

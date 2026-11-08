@@ -37,9 +37,9 @@ this order, because the frontend needs the backend's URL at build time.
    trailing path). It is read at build time, so redeploy after any change. A build without
    it, or pointing at localhost, fails on purpose with `VITE_API_URL is not set`.
    Do not mark it Sensitive: a build that pulls it would get a placeholder instead.
-   The page's Content Security Policy only lets it call this origin, and
-   [frontend/vercel.json](../frontend/vercel.json) lists `https://kisan-mitra-api.vercel.app`
-   in `connect-src`: if the API moves, change both.
+   The page's Content Security Policy only lets it call this origin. `connect-src` is
+   written into the page at build time from `VITE_API_URL` and is deliberately not in
+   [frontend/vercel.json](../frontend/vercel.json), so moving the API needs only the variable.
 3. After deploying, check the headers: `curl -sI https://kisan-mitra-gilt.vercel.app/`
    should show `content-security-policy` (with `frame-ancestors 'none'`),
    `permissions-policy`, `referrer-policy`, `strict-transport-security` and

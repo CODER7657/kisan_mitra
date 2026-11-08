@@ -20,7 +20,19 @@ from PIL import Image
 
 from kisan import config, model_store
 
-MODEL_DIR = Path(config.load().crop_model_dir or Path(__file__).resolve().parent.parent / "models")
+#: Override for tests; None means CROP_MODEL_DIR, else backend/models. Resolved when used, not at
+#: import, so importing the classifier does not validate (and fail on) unrelated settings, and
+#: a CROP_MODEL_DIR loaded from .env after import still applies.
+MODEL_DIR: Path | None = None
+DEFAULT_MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
+
+
+def model_dir() -> Path:
+    if MODEL_DIR is not None:
+        return MODEL_DIR
+    return Path(config.load().crop_model_dir or DEFAULT_MODEL_DIR)
+
+
 BACKBONE_FILE = model_store.FILENAME
 HEAD_FILE = "crop_head.json"
 INPUT = {
@@ -61,19 +73,19 @@ def load_head(path: Path) -> dict:
 def _load():
     import onnxruntime as ort
 
-    path = model_store.backbone_path(MODEL_DIR)
+    path = model_store.backbone_path(model_dir())
     if path is None:
         raise FileNotFoundError("photo classifier backbone is not available")
     session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-    return session, load_head(MODEL_DIR / HEAD_FILE)
+    return session, load_head(model_dir() / HEAD_FILE)
 
 
 def available() -> bool:
     """True when a photo can be classified: the head is here, and the backbone is or may be fetched."""
-    if not (MODEL_DIR / HEAD_FILE).exists():
+    if not (model_dir() / HEAD_FILE).exists():
         return False
     return (
-        (MODEL_DIR / BACKBONE_FILE).exists()
+        (model_dir() / BACKBONE_FILE).exists()
         or model_store.fetch_allowed()
         or (model_store.cache_dir() / BACKBONE_FILE).exists()
     )

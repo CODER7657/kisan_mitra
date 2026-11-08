@@ -12,8 +12,9 @@ SecretStr, so they never show up in a repr, a traceback or a log line.
 
 from dataclasses import dataclass, field
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field, SecretStr, ValidationError
+from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
@@ -31,7 +32,14 @@ class Settings(BaseSettings):
     # Model provider
     groq_api_key: SecretStr = SecretStr("")
     openai_api_key: SecretStr = SecretStr("")
-    llm_provider: str = ""
+    llm_provider: Literal["", "groq", "openai"] = ""
+
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def _normalise_provider(cls, value: object) -> object:
+        # " OpenAI " worked before validation existed; keep it working, reject typos.
+        return value.strip().lower() if isinstance(value, str) else value
+
     groq_chat_model: str = "qwen/qwen3.8-27b"
     groq_asr_model: str = "whisper-large-v3"
     openai_chat_model: str = "gpt-4o"

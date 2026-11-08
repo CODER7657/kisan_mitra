@@ -36,12 +36,14 @@ async function underVercelHeaders(page: Page) {
 	return problems;
 }
 
-test('the API origin the build calls is allowed by vercel.json', () => {
+test('connect-src has one source: the built page names the API origin, the header does not', () => {
 	const html = readFileSync(new URL('../build/index.html', import.meta.url), 'utf8');
 	const meta = html.match(/<meta http-equiv="content-security-policy" content="([^"]+)"/)?.[1] ?? '';
 	const api = meta.match(/connect-src 'self' (\S+);/)?.[1];
 	expect(api, 'the built page has a connect-src with the API origin').toMatch(/^https:\/\//);
-	expect(HEADERS['content-security-policy']).toContain(`connect-src 'self' ${api}`);
+	// Two copies of the origin could disagree (a preview built with another API would be
+	// blocked by a header that names production), so only the build-time meta tag sets it.
+	expect(HEADERS['content-security-policy']).not.toContain('connect-src');
 	// Scripts are allowed by hash, never by 'unsafe-inline'.
 	expect(meta).toMatch(/script-src 'self' 'sha256-[A-Za-z0-9+/=]+'/);
 	expect(meta + HEADERS['content-security-policy']).not.toMatch(/script-src[^;]*unsafe-inline/);
