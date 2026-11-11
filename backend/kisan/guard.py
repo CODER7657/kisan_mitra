@@ -7,13 +7,48 @@ not chemical doses (plant spacing, irrigation days, seed rate) are left alone.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 DIGITS = r"[0-9०-९૦-૯]"  # ASCII, Devanagari and Gujarati digits
-NUMBER = rf"{DIGITS}+(?:[.,]{DIGITS}+)?(?:\s*(?:-|to|से|થી)\s*{DIGITS}+(?:[.,]{DIGITS}+)?)?"
+# An amount can be spelled out ("ten ml", "दस मिली", "બે મિલી"). A number word counts only
+# when a unit follows it (see QUANTITY), so "one of the leaves" is not a quantity.
+NUMBER_WORDS = (
+    r"(?<![a-z])(?:half|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen"
+    r"|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|few|couple of)(?![a-z])"
+    r"|(?<![ऀ-ॿ])(?:आधा|आधी|एक|डेढ़|दो|ढाई|तीन|चार|पांच|पाँच|छह|छः|सात|आठ|नौ|दस|बीस|तीस|चालीस|पचास|सौ|हजार|हज़ार)(?![ऀ-ॿ])"
+    r"|(?<![઀-૿])(?:અડધો|અડધી|અડધું|એક|દોઢ|બે|અઢી|ત્રણ|ચાર|પાંચ|છ|સાત|આઠ|નવ|દસ|વીસ|ત્રીસ|ચાલીસ|પચાસ|સો|હજાર)(?![઀-૿])"
+)
+NUMBER = (
+    rf"(?:{DIGITS}+(?:[.,/]{DIGITS}+)?(?:\s*(?:-|to|से|થી)\s*{DIGITS}+(?:[.,/]{DIGITS}+)?)?"
+    rf"|(?:{NUMBER_WORDS}))"
+)
 UNITS = [
     r"ml",
+    r"mls",
     r"m\.l\.?",
+    r"mg",
+    r"mgs",
+    r"milligrams?",
+    r"oz",
+    r"ounces?",
+    r"tsp",
+    r"tbsp",
+    r"teaspoons?",
+    r"drops?",
+    r"caps?",
+    r"capfuls?",
+    r"lids?",
+    r"percent",
+    r"per\s?cent",
+    r"बूंद",
+    r"बूँद",
+    r"ढक्कन",
+    r"प्रतिशत",
+    r"ટીપાં",
+    r"ટીપા",
+    r"ઢાંકણ",
+    r"ટકા",
     r"millilit(?:re|er)s?",
     r"l",
     r"lit(?:re|er)s?",
@@ -70,7 +105,38 @@ UNITS = [
 ]
 # Any unit may be written with a trailing dot ("5 kg.", "10 gm.", "2 ली.", "5 મિ.લી."): the dot
 # is part of the quantity, not the end of a sentence (see split_sentences).
-QUANTITY = re.compile(rf"{NUMBER}\s*(?:{'|'.join(UNITS)})\.?(?![a-z])", re.IGNORECASE)
+# A dilution ratio ("1:500") is a dose as well; three digits on the right keep clock times out.
+QUANTITY = re.compile(
+    rf"{NUMBER}\s*(?:{'|'.join(UNITS)})\.?(?![a-z])|{DIGITS}+\s*:\s*{DIGITS}{{3,}}", re.IGNORECASE
+)
+
+
+def fold(text: str) -> str:
+    """The text as the patterns should see it; used for matching only, never shown.
+
+    Invisible format characters (zero-width space or joiner, soft hyphen, BOM) are dropped,
+    full-width letters and digits become ASCII, digits of any other script become ASCII
+    digits and a fraction sign becomes its value. Without this a zero-width space after the
+    number, or full-width digits, hides a dose from every pattern below.
+    """
+    out = []
+    for ch in text:
+        if ch.isascii():
+            out.append(ch)
+            continue
+        cat = unicodedata.category(ch)
+        if cat == "Cf":
+            continue
+        if "！" <= ch <= "～":
+            out.append(chr(ord(ch) - 0xFEE0))
+        elif cat == "Nd" and not ("०" <= ch <= "९" or "૦" <= ch <= "૯"):
+            out.append(str(unicodedata.digit(ch)))
+        elif cat == "No" and unicodedata.numeric(ch, None) is not None:
+            out.append(f"{unicodedata.numeric(ch):g}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
 
 LATIN_CHEMICAL_WORDS = [
     r"pesticides?",
@@ -188,7 +254,22 @@ BRANDS = [
     "curzate",
     "proclaim",
 ]
-BRAND = re.compile(r"\b(?:" + "|".join(BRANDS) + r")\b", re.IGNORECASE)
+# The same names as written in Devanagari and Gujarati. Not complete. Names that are also
+# everyday words (साफ "clean", हमला "attack", कवच "shield") are left out on purpose.
+INDIC_BRANDS = [
+    "कॉन्फिडोर", "कोन्फिडोर", "कन्फिडोर", "कॉन्फीडोर", "एक्टारा", "अक्तारा", "कोराजन", "ट्रेसर",
+    "रिडोमिल", "डाइथेन", "डायथेन", "इंडोफिल", "बाविस्टिन", "राउंडअप", "ग्लाइसेल", "रीजेंट",
+    "नुवान", "रोगोर", "मोनोसिल", "उलाला", "पेगासस", "कॉन्टाफ", "ब्लाइटॉक्स", "एमिस्टार",
+    "नेटिवो", "एंट्राकोल", "कर्जेट", "प्रोक्लेम",
+    "કોન્ફિડોર", "કોન્ફીડોર", "કન્ફિડોર", "એક્ટારા", "અક્તારા", "કોરાજન", "ટ્રેસર", "રિડોમિલ",
+    "ડાયથેન", "ઇન્ડોફિલ", "બાવિસ્ટિન", "રાઉન્ડઅપ", "ગ્લાયસેલ", "રીજન્ટ", "રિજેન્ટ", "નુવાન",
+    "રોગોર", "મોનોસિલ", "ઉલાલા", "પેગાસસ", "કોન્ટાફ", "બ્લાયટોક્સ", "એમિસ્ટાર", "નેટિવો",
+    "એન્ટ્રાકોલ", "કર્ઝેટ", "પ્રોક્લેમ",
+]  # fmt: skip
+BRAND = re.compile(
+    r"\b(?:" + "|".join(BRANDS) + r")s?\b|(?<![ऀ-ॿ઀-૿])(?:" + "|".join(INDIC_BRANDS) + r")",
+    re.IGNORECASE,
+)
 
 KVK = re.compile(
     r"kvk|krishi vigyan kendra|कृषि विज्ञान केंद्र|कृषि विज्ञान केन्द्र|કૃષિ વિજ્ઞાન કેન્દ્ર", re.IGNORECASE
@@ -248,11 +329,12 @@ def split_sentences(line: str) -> list[str]:
 
 
 def is_dose(sentence: str) -> bool:
+    sentence = fold(sentence)
     return bool(QUANTITY.search(sentence)) and bool(CHEMICAL.search(sentence))
 
 
 def names_brand(sentence: str) -> bool:
-    return bool(BRAND.search(sentence))
+    return bool(BRAND.search(fold(sentence)))
 
 
 # A quantity about seed or water is advice, not a dose: "20 kg seed per acre",
@@ -264,6 +346,7 @@ NOT_A_DOSE = re.compile(
 
 
 def _quantity_only(sentence: str) -> bool:
+    sentence = fold(sentence)
     return (
         bool(QUANTITY.search(sentence))
         and not CHEMICAL.search(sentence)
@@ -273,6 +356,7 @@ def _quantity_only(sentence: str) -> bool:
 
 def _chemical_only(sentence: str) -> bool:
     # A KVK referral ("before using any chemical, ask your KVK") is advice, not half a dose.
+    sentence = fold(sentence)
     return (
         bool(CHEMICAL.search(sentence))
         and not QUANTITY.search(sentence)
@@ -288,10 +372,16 @@ def split_doses(sentences: list[str]) -> set[int]:
     a pair. Seed and water quantities are exempt, so seed rate and watering advice stay.
     """
     flagged: set[int] = set()
-    for i in range(len(sentences) - 1):
-        a, b = sentences[i], sentences[i + 1]
-        if (_quantity_only(a) and _chemical_only(b)) or (_chemical_only(a) and _quantity_only(b)):
-            flagged |= {i, i + 1}
+    # One sentence may sit between the two halves ("Mix 2 ml. Wear gloves. Use imidacloprid.").
+    for i in range(len(sentences)):
+        for j in (i + 1, i + 2):
+            if j >= len(sentences):
+                break
+            a, b = sentences[i], sentences[j]
+            if (_quantity_only(a) and _chemical_only(b)) or (
+                _chemical_only(a) and _quantity_only(b)
+            ):
+                flagged |= {i, j}
     return flagged
 
 
@@ -313,11 +403,11 @@ def check(answer: str, question: str = "", language: str | None = None) -> Guard
     out_lines = []
     lines = [split_sentences(line) for line in answer.splitlines()]
     # Sentences in reading order, so a dose split across two list items is still a pair.
-    # A blank line ends a paragraph and breaks the chain.
+    # A blank line does not break the chain: models often put the amount in its own paragraph.
     drop: set[tuple[int, int]] = set()
     run: list[tuple[int, int]] = []
     for li, sentences in enumerate(lines + [[]]):
-        if not any(s.strip() for s in sentences):
+        if li == len(lines):
             texts = [lines[i][j] for i, j in run]
             drop |= {run[k] for k in split_doses(texts)}
             run = []
