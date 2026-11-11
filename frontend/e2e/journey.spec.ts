@@ -202,6 +202,8 @@ test('Read aloud speaks a Gujarati answer with a Gujarati voice, in chunks, and 
 	await askInGujarati(page);
 	await page.getByRole('button', { name: 'Read aloud' }).click();
 	await expect(page.getByRole('button', { name: 'Stop reading' })).toBeVisible();
+	// The label carries the state; a pressed flag as well would be read out as "Stop reading, pressed".
+	await expect(page.getByRole('button', { name: 'Stop reading' })).not.toHaveAttribute('aria-pressed');
 	// Utterances are queued one tick after cancel() (the Chrome workaround), so poll.
 	const read = () =>
 		page.evaluate(() =>
