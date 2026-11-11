@@ -356,7 +356,7 @@
 				<p class="muted small" role="status">{speechNote}</p>
 			{/if}
 			<div class="actions">
-				<button type="button" class="btn" on:click={readAloud} aria-pressed={speaking}
+				<button type="button" class="btn" on:click={readAloud}
 					>{#if speaking}<Square size={22} />Stop reading{:else}<Volume2 size={22} />Read aloud{/if}</button
 				>
 				<button type="button" class="btn secondary" on:click={reset}
