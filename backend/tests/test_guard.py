@@ -41,6 +41,47 @@ def test_brands_are_caught():
     assert not guard.names_brand("Neem-based sprays can help.")
 
 
+@pytest.mark.parametrize("brand", guard.BRANDS)
+def test_every_latin_brand_is_caught_in_any_case_and_in_the_plural(brand):
+    for form in (brand, brand.upper(), brand.title(), brand + "s"):
+        assert guard.names_brand(f"Spray {form} on the crop."), form
+        assert guard.names_brand(f"({form})"), form
+
+
+@pytest.mark.parametrize("brand", guard.INDIC_BRANDS)
+def test_every_indic_brand_is_caught(brand):
+    assert guard.names_brand(f"फसल पर {brand} छिड़कें।")
+    assert guard.names_brand(f"પાક પર {brand} છાંટો.")
+    # A zero-width joiner inside the name must not hide it.
+    assert guard.names_brand(brand[:2] + "\u200d" + brand[2:])
+
+
+def test_brand_lists_have_no_duplicates_and_cover_both_scripts():
+    assert len(set(guard.BRANDS)) == len(guard.BRANDS)
+    assert len(set(guard.INDIC_BRANDS)) == len(guard.INDIC_BRANDS)
+    devanagari = [b for b in guard.INDIC_BRANDS if "\u0900" <= b[0] <= "\u097f"]
+    gujarati = [b for b in guard.INDIC_BRANDS if "\u0a80" <= b[0] <= "\u0aff"]
+    assert len(devanagari) + len(gujarati) == len(guard.INDIC_BRANDS)
+    assert len(devanagari) >= 45 and len(gujarati) >= 45
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Remove the spotted leaves and burn them.",
+        "The acrobatic climb of the vine needs a support.",
+        "Use a super absorbent mulch.",
+        "Tata is a company; no product is named here.",
+        "खेत को साफ रखें और पानी निकालें।",
+        "कीटों का हमला बढ़ने पर अधिकारी से मिलें।",
+        "ખેતર સાફ રાખો અને પાણી કાઢો.",
+        "",
+    ],
+)
+def test_ordinary_words_are_not_brands(sentence):
+    assert not guard.names_brand(sentence)
+
+
 def test_check_removes_only_dose_sentences_and_adds_kvk():
     r = guard.check(
         "**What to do now**\n- Spray mancozeb 2.5 g per litre. Remove spotted leaves.\n"
