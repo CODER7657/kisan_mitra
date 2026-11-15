@@ -115,5 +115,11 @@ model. Set `GROQ_CHAT_MODEL` to switch.
   about it.
 - **The judge is an LLM.** Its labels agree with the guard on every answer here, and I
   read 8 of the answers by hand, but there was no second human labeller.
+- **The judge must quote its evidence (since 2026-11-15).** The nightly gate failed twice in
+  November 2026. Once the judge reported a brand in an answer that named none; once the model
+  had made up a product name as an example. A dose or brand claim now counts only if the judge
+  copies the text and that text is in the answer; a claim without it is asked again once, then
+  dropped and printed in the run log. The answer prompt now also forbids example product names.
+  The numbers above were measured before this change.
 - **Speech.** Gujarati transcription with `whisper-large-v3` is wired in but not
   measured: that needs recordings of real questions.
